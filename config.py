@@ -1,50 +1,52 @@
-# config.py
 import os
-
-# --- Role Configuration ---
-# Add 'customer' role
-ROLES = ["customer", "staff", "hr", "manager"]
-# Define role hierarchy (customer is lowest level 0)
-# 'public' is used as an alias for level 0 tagging in filenames
-ROLE_HIERARCHY = {
-    "customer": 0, # Lowest access level
-    "public": 0,   # Documents tagged '_public' get level 0
-    "staff": 1,
-    "hr": 2,
-    "manager": 3
-}
+from dotenv import load_dotenv
+load_dotenv()
+# --- Role Configuration (Simplified for ABAC focus) ---
+# This will be less about predefined roles and more about attributes
+# For now, we'll keep it minimal as user attributes come from UserAccessProfile DB
+# ROLES = ["staff", "manager"] # Example, less critical now
 
 # --- Document Configuration ---
-DOCS_FOLDER = "sample_docs"
+DOCS_FOLDER = os.getenv("DOCS_FOLDER", "sample_docs_phase1") # For Phase 1 testing
 ALLOWED_EXTENSIONS = [".txt", ".pdf"]
 
 # --- RAG Configuration ---
-PERSIST_DIRECTORY = "chroma_db" # ChromaDB persistence path
+# Milvus Connection Details
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "knowledge_base_v1")
+VECTOR_DIMENSION = 384 # For all-MiniLM-L6-v2
+
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-# Ensure this matches the model tag you pulled and are running with Ollama
-LLM_MODEL = "deepseek-r1:1.5b" # Or your chosen model
+EMBEDDING_MODEL = "all-MiniLM-L6-v2" # SentenceTransformer model
+LLM_MODEL = "deepseek-r1:1.5b" # Ollama model (ensure this is the correct tag for the model you pulled)
 
-# --- Ticket System Configuration ---
-# Add 'Customer Support' team
-TICKET_TEAMS = ["Customer Support", "HR", "IT", "Product", "Legal", "General"]
-TICKET_DB_PATH = "database/tickets.db"
-FEEDBACK_DB_PATH = "database/feedback.db"
+# --- Database Configuration ---
+# Parent directory for databases
+DB_PARENT_DIR = "database"
+TICKET_DB_PATH = os.path.join(DB_PARENT_DIR, "tickets.db")
+FEEDBACK_DB_PATH = os.path.join(DB_PARENT_DIR, "feedback.db")
+AUTH_DB_PATH = os.path.join(DB_PARENT_DIR, "auth_profiles.db")
 
-# Simple keyword mapping for team suggestions
-# Added specific keywords for Customer Support
+# --- Ticket System Configuration (from PoC, can be adjusted later) ---
+TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"] # Manual list for now
 TICKET_KEYWORD_MAP = {
-    # Map general customer issues to Customer Support
-    "customer support": ["account", "order", "website", "login", "purchase", "service", "product issue", "billing", "faq", "contact", "support"],
     "hr": ["payroll", "leave", "benefits", "hiring", "policy", "pto", "salary", "employee"],
     "it": ["laptop", "password", "software", "printer", "network", "access", "computer", "wifi", "system"],
-    "product": ["feature", "roadmap", "sprint", "project", "omega", "update", "deployment"],
-    "legal": ["contract", "compliance", "nda", "agreement", "terms", "policy"] # Legal might overlap with HR/General
+    "helpdesk": ["account", "order", "website", "login", "purchase", "service", "product issue", "billing", "faq", "contact", "support"],
 }
 
+
 # --- Create necessary directories ---
-# Ensure the parent directory for the databases exists
-os.makedirs(os.path.dirname(TICKET_DB_PATH), exist_ok=True)
-os.makedirs(os.path.dirname(FEEDBACK_DB_PATH), exist_ok=True)
-# ChromaDB will create its own directory defined by PERSIST_DIRECTORY
+os.makedirs(DB_PARENT_DIR, exist_ok=True)
+if not os.path.exists(DOCS_FOLDER):
+    os.makedirs(DOCS_FOLDER)
+    print(f"Created sample documents folder: {DOCS_FOLDER}")
+    # Create a dummy file for initial testing if DOCS_FOLDER was just created
+    with open(os.path.join(DOCS_FOLDER, "staff_doc_example.txt"), "w") as f:
+        f.write("This is a sample document for staff. It contains general staff information. Staff benefits include dental care.")
+    with open(os.path.join(DOCS_FOLDER, "another_doc_example.txt"), "w") as f:
+        f.write("This is another generic document, also for staff in Phase 1.")
+
+print(f"Configuration loaded. DOCS_FOLDER set to: {DOCS_FOLDER}")

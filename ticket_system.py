@@ -1,39 +1,36 @@
-# ticket_system.py
 import re
 from config import TICKET_KEYWORD_MAP, TICKET_TEAMS
-from database_utils import save_ticket
+from database_utils import save_ticket  # Uses the DB util
 
-def suggest_ticket_team(question):
-    """Suggests a ticket team based on keywords in the question."""
+
+def suggest_ticket_team(question: str):
     question_lower = question.lower()
-
-    # Iterate through the configured teams and their keywords
-    for team_name, keywords in TICKET_KEYWORD_MAP.items():
-        # Standardize team name from config key (e.g., "customer support" -> "Customer Support")
-        display_team_name = " ".join(word.capitalize() for word in team_name.split())
+    for team_key, keywords in TICKET_KEYWORD_MAP.items():
+        # Standardize team name from config key (e.g., "hr" -> "HR")
+        # Or ensure TICKET_TEAMS contains the display names
+        display_team_name = team_key.upper() if team_key.upper() in TICKET_TEAMS else \
+            team_key.capitalize() if team_key.capitalize() in TICKET_TEAMS else \
+                "General"  # Fallback if mapping is odd
 
         for keyword in keywords:
-            # Use word boundaries for more precise matching
             if re.search(r'\b' + re.escape(keyword) + r'\b', question_lower):
-                print(f"Keyword '{keyword}' matched for team '{display_team_name}'")
+                print(f"TicketSys: Keyword '{keyword}' matched for team '{display_team_name}'")
                 return display_team_name
-            # Fallback to simple substring check
-            elif keyword in question_lower:
-                 print(f"Substring '{keyword}' matched for team '{display_team_name}'")
-                 return display_team_name
+            elif keyword in question_lower:  # Fallback to substring
+                print(f"TicketSys: Substring '{keyword}' matched for team '{display_team_name}'")
+                return display_team_name
 
-    # If no specific keywords match across any team
-    print("No specific keywords matched, suggesting 'General'.")
-    # Ensure 'General' is in the TICKET_TEAMS list from config for consistency
-    return "General" if "General" in TICKET_TEAMS else TICKET_TEAMS[0] # Fallback safely
+    print("TicketSys: No specific keywords matched, suggesting 'General'.")
+    return "General" if "General" in TICKET_TEAMS else TICKET_TEAMS[0]
 
-def create_ticket(user_role, question, chat_history_summary, suggested_team, selected_team):
-    """Creates a ticket entry in the database."""
-    print(f"Creating ticket for team '{selected_team}' (Suggested: '{suggested_team}') submitted by role '{user_role}'")
+
+def create_ticket(user_role: str, question: str, chat_history_summary: str, suggested_team: str, selected_team: str):
+    print(
+        f"TicketSys: Creating ticket for team '{selected_team}' (Suggested: '{suggested_team}') by role '{user_role}'")
     success = save_ticket(
         user_role=user_role,
         question=question,
-        chat_history=chat_history_summary, # Store summary or relevant part
+        chat_history=chat_history_summary,
         suggested_team=suggested_team,
         selected_team=selected_team
     )
