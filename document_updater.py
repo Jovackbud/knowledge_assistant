@@ -1,16 +1,15 @@
-import os
-import json
-import time
-import logging
-from datetime import datetime
+import os, logging, time, json
 from typing import Dict, Any, List
+
+from langchain_community.document_loaders import TextLoader, PyPDFLoader
+from langchain_milvus import Milvus
+
+from rag_processor import extract_metadata_from_path, text_splitter
 
 # Milvus imports
 from pymilvus import connections, utility, Collection
 from pymilvus.exceptions import MilvusException
 
-# Langchain/Local imports (reuse processing logic)
-from langchain_community.vectorstores import Milvus  # Needed for add_documents
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 
 # Import necessary components and config from rag_processor and config
@@ -137,91 +136,75 @@ def delete_docs_from_milvus(filenames: List[str], collection: Collection):
     return deleted_count
 
 
-def add_docs_to_milvus(filepaths: List[str], vector_store_instance: Milvus, embeddings):
-    """Loads, processes, and adds documents from filepaths to Milvus."""
+def add_docs_to_milvus(
+    filepaths: List[str],
+    vector_store_instance: Milvus,
+    embeddings: SentenceTransformerEmbeddings
+) -> int:
+    """
+    Loads, processes, chunks, and adds documents from the list of relative filepaths
+    under DOCS_FOLDER into the Milvus vector store.
+    Returns the total number of chunks successfully added.
+    """
     if not filepaths:
         return 0
 
     added_chunk_count = 0
-    logger.info(f"Processing {len(filepaths)} files for addition/update...")
+    logger.info(f"DocumentUpdater: Processing {len(filepaths)} files for addition/update.")
 
-    # Note: load_documents expects full paths
-    full_filepaths = [os.path.join(DOCS_FOLDER, rel_path) for rel_path in filepaths]
-
-    # Reuse the loading and metadata extraction from rag_processor
-    # This returns List[Document], where each Document might be a page (for PDF)
-    # And already includes metadata like 'source' and access controls
+    # Build full paths and load each file
     all_docs = []
-    for full_path in full_filepaths:
-        # Mimic the loading logic precisely if load_documents isn't directly usable
-        # For now, assume load_documents works by processing a list?
-        # Let's refine: process one file at a time for clarity in adder
+    for rel_path in filepaths:
+        full_path = os.path.join(DOCS_FOLDER, rel_path)
+        if not os.path.isfile(full_path):
+            logger.warning(f"DocumentUpdater: Skipping non-file {full_path}")
+            continue
+
         try:
-            logger.debug(f"Loading document: {full_path}")
-            # Simplified call assuming load_documents handles single files or adjust
-            # We need to modify load_documents or create a variant for single file processing
-            # For now, let's call the existing load_documents logic - it needs refactoring
-            # Let's assume we refactor load_documents to handle a list of files
-            # OR call it repeatedly (less efficient)
-            # OR extract its core logic here
-
-            # **Reusing core logic (more self-contained updater):**
-            filename = os.path.basename(full_path)
-            ext = os.path.splitext(filename)[1].lower()
-            metadata = extract_metadata_from_path(full_path)  # From rag_processor
-
+            # Extract metadata from the file path
+            metadata = extract_metadata_from_path(full_path)
+            # Choose loader based on extension
+            ext = os.path.splitext(full_path)[1].lower()
             if ext == ".pdf":
                 loader = PyPDFLoader(full_path)
             elif ext == ".txt":
-                loader = TextLoader(full_path, encoding='utf-8')
+                loader = TextLoader(full_path, encoding="utf-8")
             else:
+                logger.warning(f"DocumentUpdater: Unsupported extension {ext}; skipping")
                 continue
 
-            loaded_docs_from_file = loader.load()
-
-            for doc in loaded_docs_from_file:
+            # Load documents (e.g. pages for PDF, whole text for TXT)
+            loaded = loader.load()
+            # Attach metadata to each Document
+            for doc in loaded:
                 doc.metadata = {**doc.metadata, **metadata}
-            all_docs.extend(loaded_docs_from_file)
-            logger.debug(f"Loaded {len(loaded_docs_from_file)} pages/docs from {filename}")
+            all_docs.extend(loaded)
+            logger.debug(f"DocumentUpdater: Loaded {len(loaded)} docs from {rel_path}")
 
         except Exception as e:
-            logger.error(f"Failed to load/process file {full_path} for addition: {e}", exc_info=True)
-            continue  # Skip this file
+            logger.error(f"DocumentUpdater: Failed to load {rel_path}: {e}", exc_info=True)
+            continue
 
     if not all_docs:
-        logger.warning("No documents successfully loaded for addition.")
+        logger.warning("DocumentUpdater: No documents loaded for addition.")
         return 0
 
-    # Split loaded documents into chunks
+    # Split into chunks
     chunks = text_splitter.split_documents(all_docs)
+    logger.info(f"DocumentUpdater: Split into {len(chunks)} chunks.")
     if not chunks:
-        logger.warning("No chunks generated from loaded documents.")
         return 0
 
-    logger.info(f"Generated {len(chunks)} chunks from {len(filepaths)} files.")
-    if chunks: logger.debug(f"Sample chunk metadata for addition: {chunks[0].metadata}")
-
-    # Add chunks to Milvus using the vector_store instance
+    # Add to Milvus
     try:
-        # vector_store_instance needs the embedding function associated
-        # We need to instantiate it correctly or pass embeddings to add_documents if possible
-        # Let's assume vector_store_instance IS the Langchain Milvus object
-
-        # Pass the embedding function directly if needed by the instance,
-        # though often it's configured during instantiation.
-        # vector_store_instance.embedding_function = embeddings # If needed
-
-        # The add_documents method typically handles embedding
-        result_pks = vector_store_instance.add_documents(chunks)
-        added_chunk_count = len(result_pks)
-        logger.info(f"Successfully added {added_chunk_count} chunks to Milvus. Result PKs sample: {result_pks[:5]}")
-
-        # TODO: Optionally update state file with added PKs if needed later?
-
-    except MilvusException as e:
-        logger.error(f"Milvus error during add_documents: {e}", exc_info=True)
+        # vector_store_instance was instantiated with the same embeddings
+        pks = vector_store_instance.add_documents(chunks)
+        added_chunk_count = len(pks)
+        logger.info(f"DocumentUpdater: Successfully added {added_chunk_count} chunks to Milvus.")
+    except MilvusException as me:
+        logger.error(f"DocumentUpdater: Milvus exception on add_documents: {me}", exc_info=True)
     except Exception as e:
-        logger.error(f"Unexpected error during add_documents: {e}", exc_info=True)
+        logger.error(f"DocumentUpdater: Unexpected error on add_documents: {e}", exc_info=True)
 
     return added_chunk_count
 

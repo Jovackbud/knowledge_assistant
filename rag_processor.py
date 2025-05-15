@@ -153,7 +153,7 @@ You are an internal knowledge assistant for African Institute for Artificial Int
     Question:
     {question}
 
-    Answer:""" # Keep template from previous version
+    Answer:"""
 
 # --- Helper Function to parse roles (NEW for Phase 2) ---
 def _parse_user_roles(profile: Dict[str, Any]) -> Dict[str, Any]:
