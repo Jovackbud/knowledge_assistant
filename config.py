@@ -1,52 +1,39 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+
 load_dotenv()
-# --- Role Configuration (Simplified for ABAC focus) ---
-# This will be less about predefined roles and more about attributes
-# For now, we'll keep it minimal as user attributes come from UserAccessProfile DB
-# ROLES = ["staff", "manager"] # Example, less critical now
 
 # --- Document Configuration ---
-DOCS_FOLDER = os.getenv("DOCS_FOLDER", "sample_docs_phase1") # For Phase 1 testing
+DOCS_FOLDER = os.getenv("DOCS_FOLDER", "company_docs")
 ALLOWED_EXTENSIONS = [".txt", ".pdf"]
+Path(DOCS_FOLDER).mkdir(parents=True, exist_ok=True)
 
-# --- RAG Configuration ---
-# Milvus Connection Details
+# --- Milvus Configuration ---
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "knowledge_base_v1")
-VECTOR_DIMENSION = 384 # For all-MiniLM-L6-v2
+MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "prod_knowledge_v1")
+VECTOR_DIMENSION = 384  # all-MiniLM-L6-v2
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-EMBEDDING_MODEL = "all-MiniLM-L6-v2" # SentenceTransformer model
-LLM_MODEL = "deepseek-r1:1.5b" # Ollama model (ensure this is the correct tag for the model you pulled)
+# --- Text Processing ---
+CHUNK_SIZE = 512
+CHUNK_OVERLAP = 64
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+LLM_MODEL = "deepseek-r1:1.5b"
 
-# --- Database Configuration ---
-# Parent directory for databases
+# --- Database Paths ---
 DB_PARENT_DIR = "database"
+Path(DB_PARENT_DIR).mkdir(exist_ok=True)
 TICKET_DB_PATH = os.path.join(DB_PARENT_DIR, "tickets.db")
 FEEDBACK_DB_PATH = os.path.join(DB_PARENT_DIR, "feedback.db")
 AUTH_DB_PATH = os.path.join(DB_PARENT_DIR, "auth_profiles.db")
 
-# --- Ticket System Configuration (from PoC, can be adjusted later) ---
-TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"] # Manual list for now
+# --- Ticket System ---
+TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]
 TICKET_KEYWORD_MAP = {
-    "hr": ["payroll", "leave", "benefits", "hiring", "policy", "pto", "salary", "employee"],
-    "it": ["laptop", "password", "software", "printer", "network", "access", "computer", "wifi", "system"],
-    "helpdesk": ["account", "order", "website", "login", "purchase", "service", "product issue", "billing", "faq", "contact", "support"],
+    "hr": ["payroll", "leave", "benefits"],
+    "it": ["password", "laptop", "network"],
+    "helpdesk": ["login", "account", "password"]
 }
 
-
-# --- Create necessary directories ---
-os.makedirs(DB_PARENT_DIR, exist_ok=True)
-if not os.path.exists(DOCS_FOLDER):
-    os.makedirs(DOCS_FOLDER)
-    print(f"Created sample documents folder: {DOCS_FOLDER}")
-    # Create a dummy file for initial testing if DOCS_FOLDER was just created
-    with open(os.path.join(DOCS_FOLDER, "staff_doc_example.txt"), "w") as f:
-        f.write("This is a sample document for staff. It contains general staff information. Staff benefits include dental care.")
-    with open(os.path.join(DOCS_FOLDER, "another_doc_example.txt"), "w") as f:
-        f.write("This is another generic document, also for staff in Phase 1.")
-
-print(f"Configuration loaded. DOCS_FOLDER set to: {DOCS_FOLDER}")
+print(f"✅ Configuration loaded | Docs: {DOCS_FOLDER} | DBs: {DB_PARENT_DIR}")
