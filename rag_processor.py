@@ -5,8 +5,7 @@ import json
 from pymilvus import utility, connections
 from typing import Dict, Any, List
 from langchain_milvus import Milvus
-# from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.llms import Ollama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
