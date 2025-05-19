@@ -1,4 +1,6 @@
-# feedback_system.py
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 from database_utils import save_feedback
 
 def record_feedback(user_role, question, answer, rating):
