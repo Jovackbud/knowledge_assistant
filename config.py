@@ -1,50 +1,87 @@
-# config.py
 import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
+os.environ["KERAS_3"] = "0"
 
-# --- Role Configuration ---
-# Add 'customer' role
-ROLES = ["customer", "staff", "hr", "manager"]
-# Define role hierarchy (customer is lowest level 0)
-# 'public' is used as an alias for level 0 tagging in filenames
-ROLE_HIERARCHY = {
-    "customer": 0, # Lowest access level
-    "public": 0,   # Documents tagged '_public' get level 0
-    "staff": 1,
-    "hr": 2,
-    "manager": 3
-}
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Document Configuration ---
-DOCS_FOLDER = "sample_docs"
-ALLOWED_EXTENSIONS = [".txt", ".pdf"]
+DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs_phase_1")
+DOCS_FOLDER = Path(DOCS_FOLDER_NAME)
+ALLOWED_EXTENSIONS = [".txt", ".pdf", ".md"]
+DOCS_FOLDER.mkdir(parents=True, exist_ok=True)
 
-# --- RAG Configuration ---
-PERSIST_DIRECTORY = "chroma_db" # ChromaDB persistence path
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-# Ensure this matches the model tag you pulled and are running with Ollama
-LLM_MODEL = "deepseek-r1:1.5b" # Or your chosen model
+# --- Document Metadata Defaults and Conventions ---
+DEFAULT_DEPARTMENT_TAG = "GENERAL_DEPARTMENT"
+DEFAULT_PROJECT_TAG = "GENERAL_PROJECT"
+DEFAULT_HIERARCHY_LEVEL = 0  # e.g., Staff/Member
+DEFAULT_ROLE_TAG = "MEMBER_ROLE" # Default role if no specific role folder found
 
-# --- Ticket System Configuration ---
-# Add 'Customer Support' team
-TICKET_TEAMS = ["Customer Support", "HR", "IT", "Product", "Legal", "General"]
-TICKET_DB_PATH = "database/tickets.db"
-FEEDBACK_DB_PATH = "database/feedback.db"
+# Known department tags for path parsing. Case-insensitive matching for path parts.
+KNOWN_DEPARTMENT_TAGS = [
+    "HR_DEPARTMENT", "IT_DEPARTMENT", "FINANCE_DEPARTMENT",
+    "LEGAL_DEPARTMENT", "MARKETING_DEPARTMENT", "OPERATIONS_DEPARTMENT", "SALES_DEPARTMENT"
+]
 
-# Simple keyword mapping for team suggestions
-# Added specific keywords for Customer Support
-TICKET_KEYWORD_MAP = {
-    # Map general customer issues to Customer Support
-    "customer support": ["account", "order", "website", "login", "purchase", "service", "product issue", "billing", "faq", "contact", "support"],
-    "hr": ["payroll", "leave", "benefits", "hiring", "policy", "pto", "salary", "employee"],
-    "it": ["laptop", "password", "software", "printer", "network", "access", "computer", "wifi", "system"],
-    "product": ["feature", "roadmap", "sprint", "project", "omega", "update", "deployment"],
-    "legal": ["contract", "compliance", "nda", "agreement", "terms", "policy"] # Legal might overlap with HR/General
+# Mapping for role-specific folder names to role tags. Folder names are matched case-insensitively.
+# Value is the role tag stored in metadata.
+ROLE_SPECIFIC_FOLDER_TAGS = {
+    "lead_docs": "LEAD_ROLE",
+    "admin_files": "ADMIN_ROLE",
+    "manager_exclusive": "MANAGER_ROLE", # More specific than hierarchy based manager
+    "team_lead_private": "TEAM_LEAD_ROLE"
 }
 
-# --- Create necessary directories ---
-# Ensure the parent directory for the databases exists
-os.makedirs(os.path.dirname(TICKET_DB_PATH), exist_ok=True)
-os.makedirs(os.path.dirname(FEEDBACK_DB_PATH), exist_ok=True)
-# ChromaDB will create its own directory defined by PERSIST_DIRECTORY
+# Mapping for folder names to hierarchy levels. Matched case-insensitively.
+# Numeric levels: Higher number means more privilege / more restricted access.
+# Matched if a folder part *contains* "KEY_LEVEL", e.g., "STAFF_0_files", "confidential_MANAGER_1_docs"
+HIERARCHY_LEVELS_CONFIG = {
+    "STAFF": 0,
+    "MEMBER": 0, # Alias for staff
+    "MANAGER": 1,
+    "SENIOR_MANAGER": 1, # Alias for manager or specific type
+    "EXECUTIVE": 2,
+    "DIRECTOR": 2, # Alias
+    "BOARD": 3,
+    "C_LEVEL": 3 # Alias
+}
+# Path structure examples:
+# DOCS_FOLDER/PROJECT_X/file.pdf
+# DOCS_FOLDER/PROJECT_X/lead_docs/plan.pdf
+# DOCS_FOLDER/HR_DEPARTMENT/PROJECT_Y/STAFF_0_GUIDELINES/onboarding.pdf
+# DOCS_FOLDER/IT_DEPARTMENT/PROJECT_Z/manager_exclusive/MANAGER_1_REPORTS/status.pdf
+
+# --- Milvus Configuration ---
+MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "adv_rbac_kb_v1") # New name for new structure
+VECTOR_DIMENSION = 384
+
+# --- Text Processing ---
+CHUNK_SIZE = 512
+CHUNK_OVERLAP = 64
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-r1:1.5b") # As per project plan
+
+# --- Database Paths ---
+DB_PARENT_DIR_NAME = "database"
+DB_PARENT_DIR = Path(DB_PARENT_DIR_NAME)
+DB_PARENT_DIR.mkdir(exist_ok=True)
+
+TICKET_DB_PATH = DB_PARENT_DIR / "tickets.db"
+FEEDBACK_DB_PATH = DB_PARENT_DIR / "feedback.db"
+AUTH_DB_PATH = DB_PARENT_DIR / "auth_profiles.db"
+SYNC_STATE_FILE = DB_PARENT_DIR / "sync_state.json"
+
+# --- Ticket System ---
+TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]
+TICKET_KEYWORD_MAP = {
+    "HR": ["payroll", "leave", "benefits", "employee"], # Generic HR keywords
+    "IT": ["password", "laptop", "network", "software"],
+    "Helpdesk": ["login", "account", "issue", "access"],
+    "Legal": ["compliance", "contract", "policy"],
+}
+
+print(f"✅ Config: Docs='{DOCS_FOLDER_NAME}', DBs='{DB_PARENT_DIR_NAME}', LLM='{LLM_MODEL}', MilvusColl='{MILVUS_COLLECTION_NAME}'")
