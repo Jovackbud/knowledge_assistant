@@ -1,13 +1,18 @@
-langchain
-langchain-community
-langchain-core
-langchain-text-splitters
-langchain-milvus
-langchain-ollama
-streamlit
-sentence-transformers
-ollama
-pypdf # For PyPDFLoader
-pymilvus # For Milvus vector store client
-python-dotenv # For managing environment variables from a .env file
-# watchdog # For Phase 2 real-time document updates
+# Core framework
+streamlit==1.45.1                          # Latest Streamlit release for interactive apps :contentReference[oaicite:0]{index=0}
+
+# Deep learning and legacy-Keras shim
+
+# Hugging Face Transformers ecosystem
+
+# LangChain integrations
+langchain-core==0.3.60                     # Core LangChain library :contentReference[oaicite:5]{index=5}
+
+# Vector database client
+pymilvus~=2.5.8
+
+# RPC & serialization dependencies
+
+python-dotenv~=1.1.0
+langchain-community~=0.3.24
+langchain-text-splitters~=0.3.8

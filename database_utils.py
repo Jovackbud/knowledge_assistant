@@ -1,5 +1,6 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
+os.environ["KERAS_3"] = "0"
 
 import sqlite3
 import json

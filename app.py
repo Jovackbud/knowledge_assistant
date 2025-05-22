@@ -1,5 +1,7 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
+os.environ["KERAS_3"] = "0"
+os.environ["STREAMLIT_WATCHED_MODULES"] = "false"
 
 import streamlit as st
 import time

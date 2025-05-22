@@ -1,5 +1,6 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
+os.environ["KERAS_3"] = "0"
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -53,7 +54,7 @@ HIERARCHY_LEVELS_CONFIG = {
 # DOCS_FOLDER/IT_DEPARTMENT/PROJECT_Z/manager_exclusive/MANAGER_1_REPORTS/status.pdf
 
 # --- Milvus Configuration ---
-MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
 MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "adv_rbac_kb_v1") # New name for new structure
 VECTOR_DIMENSION = 384
@@ -62,7 +63,7 @@ VECTOR_DIMENSION = 384
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-r1-1.5b") # As per project plan
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-r1:1.5b") # As per project plan
 
 # --- Database Paths ---
 DB_PARENT_DIR_NAME = "database"
