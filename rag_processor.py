@@ -1,8 +1,10 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
+os.environ["KERAS_3"] = "0"
+
 import logging
 import json
-from pymilvus import utility, connections
+from pymilvus import utility, connections, Collection
 from typing import Dict, Any, List
 from langchain_milvus import Milvus
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -94,12 +96,23 @@ class RAGService:
             logger.info(f"RAG: Milvus vector store connected for collection: '{collection_name}'.")
 
             if utility.has_collection(collection_name):
-                # PyMilvus 2.4+ syntax for collection object
-                milvus_coll_obj = utility.get_connection().get_collection(collection_name)
-                if not milvus_coll_obj.is_loaded:
-                    logger.info(f"RAG: Loading Milvus collection '{collection_name}' into memory.")
-                    milvus_coll_obj.load()
-                    logger.info(f"RAG: Collection '{collection_name}' loaded.")
+                logger.info(f"RAG: Checking Milvus collection '{collection_name}'...")
+
+                connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
+
+                if not connections.has_connection("default"):
+                    raise ConnectionError("Milvus connection failed: No active connection found after connect().")
+
+                try:
+                    milvus_coll_obj = Collection(collection_name, using="default")
+                    if not milvus_coll_obj.has_index():
+                        logger.info(f"RAG: Loading Milvus collection '{collection_name}' into memory.")
+                        milvus_coll_obj.load()
+                        logger.info(f"RAG: Collection '{collection_name}' loaded.")
+                except Exception as e:
+                    logger.error(f"RAG: Failed to access or load collection '{collection_name}': {e}", exc_info=True)
+                    raise
+
             # else: Collection should be created by document_updater.py
             return vector_store
         except Exception as e:
@@ -116,7 +129,7 @@ class RAGService:
             filter_expr = self._build_filter_expression(user_profile)
             logger.info(f"User '{user_email}' filter expression: {filter_expr}")
             retriever = self.vector_store.as_retriever(
-                search_kwargs={"expr": filter_expr, "k": 5}  # k = num docs
+                search_kwargs={"param": {"expr": filter_expr}, "k": 3}  # k = num docs
             )
 
         def format_docs(docs: List[Any]) -> str:
@@ -142,7 +155,7 @@ class RAGService:
 
         # 2. Department filter
         if not user_depts:  # User has no specific department memberships
-            department_filter = f'department_tag == "{DEFAULT_DEPARTMENT_TAG}"'
+            department_filter = f'department_tag == \"{DEFAULT_DEPARTMENT_TAG}\"'
         else:
             depts_json_array = json.dumps(user_depts)  # Creates '["DEPT1", "DEPT2"]'
             department_filter = f'(department_tag == "{DEFAULT_DEPARTMENT_TAG}" OR department_tag IN {depts_json_array})'
