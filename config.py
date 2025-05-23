@@ -63,7 +63,7 @@ VECTOR_DIMENSION = 384
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-r1:1.5b") # As per project plan
+LLM_MODEL = os.getenv("LLM_MODEL", "gemma3:1b")
 
 # --- Database Paths ---
 DB_PARENT_DIR_NAME = "database"
