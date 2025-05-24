@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Start Ollama server in the background
+echo "Starting Ollama server..."
+ollama serve &
+
+# Optional: Give Ollama a few seconds to start
+sleep 5 
+
+echo "Ollama server started. Proceeding with initialization..."
+
 # Initialize databases and sync documents
 python scripts/initialize.py
 
