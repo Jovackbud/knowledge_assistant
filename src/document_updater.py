@@ -386,28 +386,3 @@ def process_additions_or_updates(
             logger.error(f"Failed to add texts to Milvus: {e}", exc_info=True)
     else:
         logger.info("No new text chunks from processed files to add to Milvus.")
-
-
-if __name__ == "__main__":
-    from database_utils import init_all_databases, _create_sample_users_if_not_exist
-
-    init_all_databases()
-    _create_sample_users_if_not_exist()
-
-    # Example: Create dummy document structure for testing path parsing
-    # (DOCS_FOLDER / "PROJECT_SOLO").mkdir(parents=True, exist_ok=True)
-    # (DOCS_FOLDER / "PROJECT_SOLO" / "solo_file.txt").write_text("Content for a project-only file.")
-
-    # (DOCS_FOLDER / "PROJECT_MAIN" / "lead_docs").mkdir(parents=True, exist_ok=True)
-    # (DOCS_FOLDER / "PROJECT_MAIN" / "lead_docs" / "lead_plan.txt").write_text("Secret lead plan for PROJECT_MAIN.")
-
-    # dept1_name = KNOWN_DEPARTMENT_TAGS[0] if KNOWN_DEPARTMENT_TAGS else "HR_DEPARTMENT"
-    # (DOCS_FOLDER / dept1_name / "PROJECT_ALPHA" / "STAFF_0_GENERAL").mkdir(parents=True, exist_ok=True)
-    # (DOCS_FOLDER / dept1_name / "PROJECT_ALPHA" / "STAFF_0_GENERAL" / "alpha_guide_for_staff.md").write_text("Guide for staff on Alpha.")
-
-    # (DOCS_FOLDER / dept1_name / "PROJECT_BETA" / "manager_exclusive" / "MANAGER_1_STRATEGY").mkdir(parents=True, exist_ok=True)
-    # (DOCS_FOLDER / dept1_name / "PROJECT_BETA" / "manager_exclusive" / "MANAGER_1_STRATEGY" / "beta_strategy.pdf").write_text("PDF BETA STRATEGY")
-
-    logger.info("Starting document synchronization script directly.")
-    synchronize_documents()
-    logger.info("Document synchronization script finished.")
