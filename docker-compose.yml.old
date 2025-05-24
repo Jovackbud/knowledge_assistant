@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  milvus:
+    image: local-milvus-standalone:2.5
+    ports:
+      - "19530:19530"
+    volumes:
+      - milvus_data:/var/lib/milvus
+
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    depends_on:
+      - milvus
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env.production
+
+volumes:
+  milvus_data:
