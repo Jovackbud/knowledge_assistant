@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   milvus:
-    image: milvusdb/milvus:latest
+    image: local-milvus-standalone:2.5
     ports:
       - "19530:19530"
     volumes:
