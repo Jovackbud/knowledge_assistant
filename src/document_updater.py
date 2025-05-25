@@ -1,7 +1,4 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
 import time
 import json
 import re
@@ -25,7 +22,6 @@ from config import (
 
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("DocumentUpdater")
 
 

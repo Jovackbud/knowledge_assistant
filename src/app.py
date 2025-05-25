@@ -1,6 +1,4 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
 os.environ["STREAMLIT_WATCHED_MODULES"] = "false"
 
 import streamlit as st
@@ -181,8 +179,10 @@ if session.user_email and session.rag_service:
                 if not q_ticket.strip():
                     st.error("Description empty.")
                 else:
-                    hist = session.chat_history[-10:]
-                    if create_ticket(session.user_email, q_ticket, hist):
+                    hist = session.chat_history[-10:] # Capture last 10 messages for context
+                    # Ensure chat history is serialized to JSON string
+                    chat_history_json = json.dumps(hist) 
+                    if create_ticket(session.user_email, q_ticket, chat_history_json, sel_team):
                         st.success(f"✅ Ticket created for '{sel_team}'!")
                         logger.info(f"Ticket by {session.user_email} for {sel_team}, Q: {q_ticket[:50]}")
                         session.show_ticket_form = False;

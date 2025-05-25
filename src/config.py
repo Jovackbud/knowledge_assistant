@@ -36,7 +36,7 @@ ROLE_SPECIFIC_FOLDER_TAGS = {
 
 # Mapping for folder names to hierarchy levels. Matched case-insensitively.
 # Numeric levels: Higher number means more privilege / more restricted access.
-# Matched if a folder part *contains* "KEY_LEVEL", e.g., "STAFF_0_files", "confidential_MANAGER_1_docs"
+# Matched if a folder part contains the KEY (from this dict) and its _LEVEL_ (e.g., "STAFF_0_" or "MANAGER_1_"). Example: "STAFF_0_files", "confidential_MANAGER_1_docs".
 HIERARCHY_LEVELS_CONFIG = {
     "STAFF": 0,
     "MEMBER": 0, # Alias for staff
@@ -84,4 +84,5 @@ TICKET_KEYWORD_MAP = {
     "Legal": ["compliance", "contract", "policy"],
 }
 
-print(f"✅ Config: Docs='{DOCS_FOLDER_NAME}', DBs='{DB_PARENT_DIR_NAME}', LLM='{LLM_MODEL}', MilvusColl='{MILVUS_COLLECTION_NAME}'")
+if __name__ == "__main__":
+    print(f"✅ Config: Docs='{DOCS_FOLDER_NAME}', DBs='{DB_PARENT_DIR_NAME}', LLM='{LLM_MODEL}', MilvusColl='{MILVUS_COLLECTION_NAME}'")

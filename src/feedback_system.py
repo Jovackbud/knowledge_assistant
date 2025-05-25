@@ -1,12 +1,11 @@
-import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
+import logging
 from database_utils import save_feedback
+
+logger = logging.getLogger(__name__)
 
 def record_feedback(user_email, question, answer, rating):
     """Records user feedback."""
-    print(f"Recording feedback: {rating} for question: '{question[:50]}...' by role '{user_email}'")
+    logger.info(f"Recording feedback: {rating} for question: '{question[:50]}...' by user '{user_email}'")
     success = save_feedback(
         user_email=user_email,
         question=question,
@@ -14,5 +13,5 @@ def record_feedback(user_email, question, answer, rating):
         rating=rating
     )
     if not success:
-        print("Warning: Failed to save feedback to the database.")
+        logger.warning("Failed to save feedback to the database.")
     return success
