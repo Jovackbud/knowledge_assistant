@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Node.js
+node_modules/
+
+# Virtual environments
+venv/
+.env/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+.idea/
+
+milvus/
+database/
+sample_docs_phase_1
+knowledge_assistant.pdf
+knowledge_assistant.docx

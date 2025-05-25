@@ -1,7 +1,3 @@
-import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
 import sqlite3
 import json
 import logging
@@ -250,10 +246,3 @@ def _create_sample_users_if_not_exist():
         if not get_user_profile(email):
             add_or_update_user_profile(email, data)
             logger.info(f"Created sample user: {email}")  # Data not logged here to avoid clutter
-
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    init_all_databases()
-    _create_sample_users_if_not_exist()
-    logger.info("Database utilities script finished execution.")

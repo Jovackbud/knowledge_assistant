@@ -1,7 +1,3 @@
-import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
 import logging
 from typing import Dict, Optional, Any
 from database_utils import get_user_profile, add_or_update_user_profile

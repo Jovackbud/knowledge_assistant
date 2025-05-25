@@ -1,7 +1,3 @@
-import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
 import logging
 import json
 from pymilvus import utility, connections, Collection
@@ -21,7 +17,6 @@ from config import (
 )
 from auth_service import fetch_user_access_profile
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
