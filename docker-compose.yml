@@ -1,4 +1,4 @@
-version: '3.8' # Using a slightly newer version for consistency, 3.5 features are compatible.
+# version: '3.8' # Using a slightly newer version for consistency, 3.5 features are compatible.
 
 services:
   etcd:
