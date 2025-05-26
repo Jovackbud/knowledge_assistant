@@ -24,6 +24,5 @@ RUN mkdir -p /data/{docs,database}
 
 # Pull the LLM model
 # This command is executed by the ollama CLI after its installation.
-RUN echo "Pulling Gemma model..." &&     ollama pull gemma3:1b &&     echo "Gemma model pull finished."
 
 CMD ["bash", "scripts/start.sh"]
