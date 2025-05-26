@@ -7,6 +7,11 @@ ollama serve &
 # Optional: Give Ollama a few seconds to start
 sleep 5 
 
+# Pull the Gemma model
+echo "Pulling Gemma model..."
+ollama pull gemma3:1b
+echo "Gemma model pull finished."
+
 echo "Ollama server started. Proceeding with initialization..."
 
 # Initialize databases and sync documents
