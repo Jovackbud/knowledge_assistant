@@ -77,7 +77,7 @@ services:
       # If you need to share files with Milvus directly, configure here.
       # For now, assuming documents are processed by the app and pushed to Milvus.
     env_file:
-      - .env.production
+      - .env
     networks:
       - milvus_network # Connect app to the same network as Milvus stack
 

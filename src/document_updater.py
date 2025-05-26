@@ -21,6 +21,7 @@ from config import (
 # from rag_processor import RAGService # No, RAGService needs SentenceTransformerEmbeddings, get it directly
 
 from langchain_community.embeddings import SentenceTransformerEmbeddings
+# from langchain_huggingface import SentenceTransformerEmbeddings
 
 logger = logging.getLogger("DocumentUpdater")
 
