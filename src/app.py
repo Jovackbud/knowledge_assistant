@@ -27,7 +27,9 @@ from config import LLM_MODEL, DEFAULT_ROLE_TAG # Removed TICKET_TEAMS import, wi
 # Removed direct auth_service imports: fetch_user_access_profile, get_or_create_test_user_profile
 import requests # Added for API calls
 
-FASTAPI_BASE_URL = "http://localhost:8000" # Added: Make this configurable later
+# Use environment variable for FastAPI URL, with a default for local development
+FASTAPI_BASE_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
+logger.info(f"FastAPI base URL set to: {FASTAPI_BASE_URL}")
 
 
 class AppSessionState:
