@@ -7,6 +7,8 @@ streamlit==1.45.1                          # Latest Streamlit release for intera
 
 # LangChain integrations
 langchain-core==0.3.60                     # Core LangChain library :contentReference[oaicite:5]{index=5}
+fastapi
+uvicorn[standard]
 
 # Vector database client
 pymilvus~=2.5.8

@@ -74,6 +74,7 @@ services:
   app:
     build: . # Assumes Dockerfile is in the project root
     ports:
+      - "8000:8000" # FastAPI port
       - "8501:8501" # Streamlit app port
     depends_on:
       standalone: # Depends on the Milvus standalone service
