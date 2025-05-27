@@ -19,10 +19,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ src/
 COPY scripts/ scripts/
+COPY run.sh .
+
+RUN chmod +x ./run.sh
 
 RUN mkdir -p /data/{docs,database}
 
+# Expose ports for FastAPI and Streamlit
+EXPOSE 8000
+EXPOSE 8501
+
 # Pull the LLM model
 # This command is executed by the ollama CLI after its installation.
+# The start.sh script (or now run.sh) should handle starting Ollama and pulling models if needed.
 
-CMD ["bash", "scripts/start.sh"]
+CMD ["./run.sh"]
