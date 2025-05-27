@@ -71,40 +71,22 @@ services:
       retries: 5
       start_period: 60s
 
-  backend:
+  app: # Renamed from flask_frontend, runs FastAPI only
     build: .
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 # Explicit command for clarity, though Dockerfile has it
+    command: bash scripts/start.sh # This script now starts only FastAPI
     ports:
-      - "8000:8000"
+      - "8000:8000" # For FastAPI
     volumes:
-      - ./src:/app # Mounts src directory from host to /app in container
+      - ./src:/app 
       - ./data:/data
     env_file:
       - .env
+    # FASTAPI_URL is not needed as this service is the FastAPI provider.
     networks:
       - milvus_network
     depends_on:
-      standalone:
+      standalone: # Depends on Milvus to be healthy
         condition: service_healthy
-
-  frontend:
-    build: .
-    command: streamlit run src/app.py --server.port 8501 --server.address 0.0.0.0 --server.enableCORS false --server.enableXsrfProtection false
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./src:/app # Mounts src directory from host to /app in container
-      - ./data:/data
-    env_file:
-      - .env
-    environment:
-      - FASTAPI_URL=http://backend:8000
-    networks:
-      - milvus_network
-    depends_on:
-      - backend # Depends on the backend service to be up
-      # standalone: # Indirectly depends on Milvus via backend, but can be explicit if needed
-      #   condition: service_healthy
 
 
 networks:

@@ -1,5 +1,4 @@
 # Core framework
-streamlit==1.45.1                          # Latest Streamlit release for interactive apps :contentReference[oaicite:0]{index=0}
 
 # Deep learning and legacy-Keras shim
 
