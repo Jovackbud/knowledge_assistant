@@ -15,7 +15,7 @@ from config import (
     EMBEDDING_MODEL, LLM_MODEL,
     DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG
 )
-from auth_service import fetch_user_access_profile
+from src.auth_service import fetch_user_access_profile
 
 logger = logging.getLogger(__name__)
 

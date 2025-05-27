@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Optional, Any
-from database_utils import get_user_profile, add_or_update_user_profile
+from src.database_utils import get_user_profile, add_or_update_user_profile
 from config import DEFAULT_HIERARCHY_LEVEL
 
 logger = logging.getLogger(__name__)

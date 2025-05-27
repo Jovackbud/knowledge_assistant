@@ -8,14 +8,21 @@ from src.feedback_system import record_feedback
 from src.database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
 import logging # Added
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import os
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="../static"), name="static")
+SRC_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SRC_DIR.parent
+STATIC_DIR = PROJECT_ROOT / "static"
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.info(f"Attempting to mount static directory at: {str(STATIC_DIR)}")
+logger.info(f"Does STATIC_DIR exist? {STATIC_DIR.exists()}")
+logger.info(f"Is STATIC_DIR a directory? {STATIC_DIR.is_dir()}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -30,9 +37,16 @@ async def startup_event():
         # Depending on the application's needs, you might want to re-raise the exception
         # or handle it in a way that prevents the app from starting if dbs are critical.
 
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/")
 async def root():
-    return FileResponse("../static/index.html")
+    html_file_path = STATIC_DIR / "index.html"
+    logger.info(f"Serving root HTML from: {str(html_file_path)}")
+    if html_file_path.exists():
+        return FileResponse(str(html_file_path))
+    else:
+        logger.error(f"Root index.html not found at {str(html_file_path)}")
+        return HTTPException(status_code=404, detail="index.html not found")
 
 @app.post("/auth/login")
 async def login(credentials: AuthCredentials):
