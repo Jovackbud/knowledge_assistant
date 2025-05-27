@@ -71,23 +71,41 @@ services:
       retries: 5
       start_period: 60s
 
-  app:
-    build: . # Assumes Dockerfile is in the project root
+  backend:
+    build: .
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 # Explicit command for clarity, though Dockerfile has it
     ports:
-      - "8000:8000" # FastAPI port
-      - "8501:8501" # Streamlit app port
-    depends_on:
-      standalone: # Depends on the Milvus standalone service
-        condition: service_healthy # Wait for Milvus to be healthy
+      - "8000:8000"
     volumes:
-      - ./app:/app # app source code
-      - ./data:/data # Application-specific data
-      # If you need to share files with Milvus directly, configure here.
-      # For now, assuming documents are processed by the app and pushed to Milvus.
+      - ./src:/app # Mounts src directory from host to /app in container
+      - ./data:/data
     env_file:
       - .env
     networks:
-      - milvus_network # Connect app to the same network as Milvus stack
+      - milvus_network
+    depends_on:
+      standalone:
+        condition: service_healthy
+
+  frontend:
+    build: .
+    command: streamlit run src/app.py --server.port 8501 --server.address 0.0.0.0 --server.enableCORS false --server.enableXsrfProtection false
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src:/app # Mounts src directory from host to /app in container
+      - ./data:/data
+    env_file:
+      - .env
+    environment:
+      - FASTAPI_URL=http://backend:8000
+    networks:
+      - milvus_network
+    depends_on:
+      - backend # Depends on the backend service to be up
+      # standalone: # Indirectly depends on Milvus via backend, but can be explicit if needed
+      #   condition: service_healthy
+
 
 networks:
   milvus_network: # Define the shared network

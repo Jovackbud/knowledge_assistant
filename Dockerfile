@@ -19,18 +19,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ src/
 COPY scripts/ scripts/
-COPY run.sh .
-
-RUN chmod +x ./run.sh
+# COPY run.sh . # Removed
+# RUN chmod +x ./run.sh # Removed
 
 RUN mkdir -p /data/{docs,database}
 
-# Expose ports for FastAPI and Streamlit
+# Expose port for FastAPI
 EXPOSE 8000
-EXPOSE 8501
+# EXPOSE 8501 # Removed, as this image is now FastAPI-only
 
 # Pull the LLM model
 # This command is executed by the ollama CLI after its installation.
-# The start.sh script (or now run.sh) should handle starting Ollama and pulling models if needed.
+# Ollama startup and model pulling should be handled by its own service or an init script if needed.
 
-CMD ["./run.sh"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
