@@ -3,109 +3,466 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastAPI Frontend</title>
+    <title>Company Knowledge Assistant - Flask</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .hidden { display: none; }
+        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
+        .chat-message { margin-bottom: 10px; }
+        .user-message { text-align: right; color: #007bff; }
+        .assistant-message { text-align: left; color: #28a745; }
+        label { display: block; margin-bottom: 5px; }
+        input[type='email'], input[type='text'], textarea, select { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+        button:hover { background-color: #0056b3; }
+        #feedback-buttons button { background-color: #6c757d; }
+        #feedback-buttons button:hover { background-color: #545b62; }
+        #ticket-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000; border-radius: 8px; }
+        #ticket-form-container { width: 400px; }
+    </style>
 </head>
 <body>
-    <h1>FastAPI Frontend</h1>
-    <div id="login-section">
-        <h2>Login</h2>
-        <input type="email" id="email" placeholder="Enter your email">
-        <button id="loginButton">Login</button>
-    </div>
-    <div id="chat-section">
-        <h2>RAG Chat</h2>
-        <textarea id="prompt" placeholder="Enter your chat prompt"></textarea>
-        <button id="sendPromptButton">Send</button>
-    </div>
-    <div id="response-area">
-        <!-- Messages and responses will be displayed here -->
+    <div class="container">
+        <h1>Company Knowledge Assistant</h1>
+
+        <!-- Login Section -->
+        <div id="login-section">
+            <h2>Login</h2>
+            <label for="email">Work Email:</label>
+            <input type="email" id="email" placeholder="user@example.com">
+            <button id="loginButton">Login</button>
+            <p id="login-error" style="color: red;"></p>
+        </div>
+
+        <!-- User Profile Section (hidden by default) -->
+        <div id="user-profile-section" class="hidden">
+            <h2>User Profile</h2>
+            <p><strong>Email:</strong> <span id="profile-email"></span></p>
+            <p><strong>Hierarchy Level:</strong> <span id="profile-hierarchy"></span></p>
+            <p><strong>Departments:</strong> <span id="profile-departments"></span></p>
+            <p><strong>Projects:</strong> <span id="profile-projects"></span></p>
+            <p><strong>Roles:</strong> <span id="profile-roles"></span></p>
+            <button id="logoutButton">Logout</button>
+        </div>
+
+        <!-- Chat Section (hidden by default) -->
+        <div id="chat-section" class="hidden">
+            <h2>Chat</h2>
+            <div id="chat-history"></div>
+            <input type="text" id="chat-input" placeholder="Ask your question...">
+            <button id="sendChatButton">Send</button>
+        </div>
+
+        <!-- Feedback Section (hidden by default, shown after an answer) -->
+        <div id="feedback-section" class="hidden">
+            <h3>Was this answer helpful?</h3>
+            <div id="feedback-buttons">
+                <button id="helpfulButton">👍 Helpful</button>
+                <button id="notHelpfulButton">👎 Not Helpful</button>
+            </div>
+            <p id="feedback-message" style="color: green;"></p>
+        </div>
+
+        <!-- Ticket Creation Button (hidden by default) -->
+        <div id="ticket-creation-trigger" class="hidden">
+            <hr>
+            <button id="openTicketModalButton">Create Support Ticket</button>
+        </div>
+        
+        <!-- Ticket Modal (hidden by default) -->
+        <div id="ticket-modal" class="hidden">
+            <div id="ticket-form-container">
+                <h2>New Support Ticket</h2>
+                <label for="ticket-question">Issue/Question:</label>
+                <textarea id="ticket-question" rows="3"></textarea>
+                
+                <label for="ticket-team">Team:</label>
+                <select id="ticket-team">
+                    <!-- Options will be populated dynamically -->
+                </select>
+                <p id="team-suggestion"></p>
+
+                <button id="submitTicketButton">Submit Ticket</button>
+                <button id="cancelTicketButton">Cancel</button>
+                <p id="ticket-submission-message" style="color: green;"></p>
+            </div>
+        </div>
     </div>
 
     <script>
-        let currentUserEmail = null; // Variable to store the logged-in user's email
+        document.addEventListener('DOMContentLoaded', () => {
+            // Element Selectors
+            const loginSection = document.getElementById('login-section');
+            const userProfileSection = document.getElementById('user-profile-section');
+            const chatSection = document.getElementById('chat-section');
+            const feedbackSection = document.getElementById('feedback-section');
+            const ticketCreationTrigger = document.getElementById('ticket-creation-trigger');
+            const ticketModal = document.getElementById('ticket-modal');
 
-        document.getElementById('loginButton').addEventListener('click', async () => {
             const emailInput = document.getElementById('email');
-            const email = emailInput.value;
-            const responseArea = document.getElementById('response-area');
-            responseArea.innerHTML = ''; // Clear previous messages
+            const loginButton = document.getElementById('loginButton');
+            const loginError = document.getElementById('login-error');
 
-            if (!email) {
-                responseArea.innerHTML = '<p style="color: red;">Please enter your email.</p>';
-                return;
+            const profileEmail = document.getElementById('profile-email');
+            const profileHierarchy = document.getElementById('profile-hierarchy');
+            const profileDepartments = document.getElementById('profile-departments');
+            const profileProjects = document.getElementById('profile-projects');
+            const profileRoles = document.getElementById('profile-roles');
+            const logoutButton = document.getElementById('logoutButton');
+
+            const chatHistoryDiv = document.getElementById('chat-history');
+            const chatInput = document.getElementById('chat-input');
+            const sendChatButton = document.getElementById('sendChatButton');
+
+            const feedbackButtonsDiv = document.getElementById('feedback-buttons');
+            const helpfulButton = document.getElementById('helpfulButton');
+            const notHelpfulButton = document.getElementById('notHelpfulButton');
+            const feedbackMessage = document.getElementById('feedback-message');
+            
+            const openTicketModalButton = document.getElementById('openTicketModalButton');
+            const ticketQuestionTextarea = document.getElementById('ticket-question');
+            const ticketTeamSelect = document.getElementById('ticket-team');
+            const teamSuggestionP = document.getElementById('team-suggestion');
+            const submitTicketButton = document.getElementById('submitTicketButton');
+            const cancelTicketButton = document.getElementById('cancelTicketButton');
+            const ticketSubmissionMessage = document.getElementById('ticket-submission-message');
+
+            // State Variables
+            let currentUserEmail = null;
+            let currentUserProfile = null;
+            let currentQuestion = null;
+            let currentAnswer = null;
+            let chatHistory = []; // To store {role: 'user'/'assistant', content: 'message'}
+
+            // Visibility Functions
+            function showLogin() {
+                loginSection.classList.remove('hidden');
+                userProfileSection.classList.add('hidden');
+                chatSection.classList.add('hidden');
+                feedbackSection.classList.add('hidden');
+                ticketCreationTrigger.classList.add('hidden');
+                ticketModal.classList.add('hidden');
             }
 
-            try {
-                const response = await fetch('/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ email: email }),
-                });
+            function showProfile() {
+                userProfileSection.classList.remove('hidden');
+            }
 
-                const data = await response.json();
+            function showChat() {
+                loginSection.classList.add('hidden');
+                userProfileSection.classList.remove('hidden'); // Keep profile visible
+                chatSection.classList.remove('hidden');
+                ticketCreationTrigger.classList.remove('hidden');
+            }
+            
+            function hideFeedback() {
+                feedbackSection.classList.add('hidden');
+                feedbackMessage.textContent = '';
+            }
 
-                if (response.ok) {
-                    currentUserEmail = email; // Store email on successful login
-                    responseArea.innerHTML = `<p style="color: green;">Login successful! Email: ${currentUserEmail}</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
-                    console.log("Login successful:", data);
-                     document.getElementById('sendPromptButton').disabled = false; // Enable chat button
-                } else {
-                    currentUserEmail = null; // Reset email on failed login
-                    responseArea.innerHTML = `<p style="color: red;">Login failed: ${data.detail || response.statusText}</p>`;
-                    console.error("Login failed:", data);
-                    document.getElementById('sendPromptButton').disabled = true; // Keep chat button disabled
+            function showFeedback() {
+                feedbackButtonsDiv.classList.remove('hidden'); // Ensure buttons are visible
+                feedbackSection.classList.remove('hidden');
+                feedbackMessage.textContent = ''; // Clear previous message
+            }
+            
+            function hideTicketModal() {
+                ticketModal.classList.add('hidden');
+                ticketSubmissionMessage.textContent = '';
+                teamSuggestionP.textContent = '';
+                ticketQuestionTextarea.value = '';
+            }
+
+            // --- Event Listeners ---
+
+            // Login
+            loginButton.addEventListener('click', async () => {
+                const email = emailInput.value.trim();
+                loginError.textContent = '';
+                if (!email) {
+                    loginError.textContent = 'Please enter your email.';
+                    return;
                 }
-            } catch (error) {
-                currentUserEmail = null; // Reset email on error
-                responseArea.innerHTML = `<p style="color: red;">An error occurred during login: ${error.message}</p>`;
-                console.error("Login fetch error:", error);
-                document.getElementById('sendPromptButton').disabled = true; // Keep chat button disabled
-            }
-        });
 
-        document.getElementById('sendPromptButton').addEventListener('click', async () => {
-            const promptInput = document.getElementById('prompt');
-            const prompt = promptInput.value;
-            const responseArea = document.getElementById('response-area');
+                try {
+                    // 1. Login Functionality: URL changed to /auth/login
+                    const response = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email }) // FastAPI expects {"email": "..."}
+                    });
+                    const data = await response.json();
 
-            if (!currentUserEmail) {
-                responseArea.innerHTML += '<p style="color: red;">Please login first to use the chat.</p>';
-                return;
-            }
-
-            if (!prompt) {
-                responseArea.innerHTML += '<p style="color: red;">Please enter a prompt.</p>';
-                return;
-            }
-
-            try {
-                const response = await fetch('/rag/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ email: currentUserEmail, prompt: prompt }),
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    responseArea.innerHTML += `<p style="color: blue;">You: ${prompt}</p><p style="color: green;">Chatbot: ${data.response || JSON.stringify(data, null, 2)}</p>`;
-                    promptInput.value = ''; // Clear the prompt input
-                } else {
-                    responseArea.innerHTML += `<p style="color: red;">Chat error: ${data.detail || response.statusText}</p>`;
-                    console.error("Chat error:", data);
+                    if (response.ok) {
+                        currentUserEmail = data.email; // Store email from response
+                        currentUserProfile = data; // Store full profile
+                        
+                        profileEmail.textContent = currentUserProfile.email || 'N/A';
+                        profileHierarchy.textContent = currentUserProfile.hierarchy_level || 'N/A';
+                        profileDepartments.textContent = (currentUserProfile.departments || []).join(', ') || 'N/A';
+                        profileProjects.textContent = (currentUserProfile.projects || []).join(', ') || 'N/A';
+                        profileRoles.textContent = (currentUserProfile.roles || []).join(', ') || 'N/A';
+                        
+                        showChat();
+                        emailInput.value = ''; // Clear login input
+                    } else {
+                        loginError.textContent = data.detail || data.error || 'Login failed. Please check your email.'; // FastAPI often uses "detail" for errors
+                        currentUserEmail = null;
+                        currentUserProfile = null;
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    loginError.textContent = 'An error occurred during login.';
+                    currentUserEmail = null;
+                    currentUserProfile = null;
                 }
-            } catch (error) {
-                responseArea.innerHTML += `<p style="color: red;">An error occurred during chat: ${error.message}</p>`;
-                console.error("Chat fetch error:", error);
+            });
+
+            // Logout
+            // 2. Logout Functionality: Removed fetch call, client-side only
+            logoutButton.addEventListener('click', () => {
+                currentUserEmail = null;
+                currentUserProfile = null;
+                currentQuestion = null;
+                currentAnswer = null;
+                chatHistory = [];
+                
+                chatHistoryDiv.innerHTML = '';
+                profileEmail.textContent = '';
+                profileHierarchy.textContent = '';
+                profileDepartments.textContent = '';
+                profileProjects.textContent = '';
+                profileRoles.textContent = '';
+                
+                hideFeedback();
+                showLogin();
+                // No alert needed for client-side only operation
+            });
+
+            // Append message to chat history display
+            function appendMessage(role, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chat-message', role === 'user' ? 'user-message' : 'assistant-message');
+                messageDiv.textContent = text;
+                chatHistoryDiv.appendChild(messageDiv);
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight; // Scroll to bottom
             }
+
+            // Send Chat Message
+            sendChatButton.addEventListener('click', async () => {
+                const prompt = chatInput.value.trim();
+                if (!prompt || !currentUserEmail) return; // Ensure user is logged in
+
+                appendMessage('user', prompt);
+                chatHistory.push({ role: 'user', content: prompt });
+                currentQuestion = prompt;
+                chatInput.value = '';
+                hideFeedback(); // Hide previous feedback section
+
+                try {
+                    // 3. Chat Functionality: URL changed to /rag/chat, payload includes email
+                    const response = await fetch('/rag/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: currentUserEmail, prompt: prompt }) 
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        currentAnswer = data.response; // FastAPI returns {"response": "..."}
+                        appendMessage('assistant', currentAnswer);
+                        chatHistory.push({ role: 'assistant', content: currentAnswer });
+                        showFeedback();
+                    } else {
+                        appendMessage('assistant', `Error: ${data.detail || data.error || 'Could not get response.'}`);
+                        currentAnswer = null; // No valid answer
+                    }
+                } catch (error) {
+                    console.error('Chat error:', error);
+                    appendMessage('assistant', 'An error occurred while fetching the response.');
+                    currentAnswer = null;
+                }
+            });
+            
+            chatInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    sendChatButton.click();
+                }
+            });
+
+            // Feedback
+            async function handleFeedback(feedbackType) {
+                if (!currentQuestion || !currentAnswer || !currentUserEmail) return; // Ensure user is logged in
+
+                feedbackMessage.textContent = '';
+                try {
+                    // 4. Feedback Functionality: URL changed to /feedback/record, payload includes email
+                    const response = await fetch('/feedback/record', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email: currentUserEmail, // Add email to payload
+                            question: currentQuestion,
+                            answer: currentAnswer,
+                            feedback_type: feedbackType
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        feedbackMessage.textContent = 'Feedback received. Thank you!';
+                        feedbackButtonsDiv.classList.add('hidden'); // Hide buttons after feedback
+                    } else {
+                        feedbackMessage.textContent = `Error: ${data.detail || data.error || 'Could not submit feedback.'}`;
+                    }
+                } catch (error) {
+                    console.error('Feedback error:', error);
+                    feedbackMessage.textContent = 'An error occurred while submitting feedback.';
+                }
+            }
+
+            helpfulButton.addEventListener('click', () => handleFeedback('👍'));
+            notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
+
+            // Ticket Modal
+            openTicketModalButton.addEventListener('click', () => {
+                ticketModal.classList.remove('hidden');
+                ticketQuestionTextarea.value = currentQuestion || ''; // Pre-fill with last question if available
+                ticketSubmissionMessage.textContent = '';
+                teamSuggestionP.textContent = '';
+                // Trigger team suggestion based on pre-filled question
+                if (ticketQuestionTextarea.value) {
+                    ticketQuestionTextarea.dispatchEvent(new Event('input'));
+                }
+            });
+
+            cancelTicketButton.addEventListener('click', () => {
+                hideTicketModal();
+            });
+
+            // Team Suggestion for Ticket
+            let suggestTeamTimeout;
+            ticketQuestionTextarea.addEventListener('input', () => {
+                clearTimeout(suggestTeamTimeout);
+                const questionText = ticketQuestionTextarea.value.trim();
+                teamSuggestionP.textContent = '';
+                ticketTeamSelect.innerHTML = '<option value="">Loading teams...</option>'; // Clear old options
+
+                if (!questionText) {
+                    ticketTeamSelect.innerHTML = '<option value="">Enter question to see suggestions</option>';
+                    return;
+                }
+
+                suggestTeamTimeout = setTimeout(async () => {
+                    try {
+                        // 5. Team Suggestion Functionality: URL changed to /tickets/suggest_team
+                        const response = await fetch('/tickets/suggest_team', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ question_text: questionText }) // FastAPI expects {"question_text": "..."}
+                        });
+                        const data = await response.json();
+
+                        ticketTeamSelect.innerHTML = ''; // Clear loading/previous options
+                        if (response.ok) {
+                            // FastAPI returns {"suggested_team": "...", "available_teams": ["TeamA", ...]}
+                            if (data.available_teams && data.available_teams.length > 0) {
+                                data.available_teams.forEach(team => {
+                                    const option = document.createElement('option');
+                                    option.value = team;
+                                    option.textContent = team;
+                                    if (team === data.suggested_team) {
+                                        option.selected = true;
+                                    }
+                                    ticketTeamSelect.appendChild(option);
+                                });
+                                if (data.suggested_team) {
+                                    teamSuggestionP.textContent = `Suggested Team: ${data.suggested_team}`;
+                                } else {
+                                    teamSuggestionP.textContent = 'Could not determine a specific suggestion, please select a team.';
+                                }
+                            } else {
+                                ticketTeamSelect.innerHTML = '<option value="">No teams available</option>';
+                                teamSuggestionP.textContent = 'No teams available for suggestion.';
+                            }
+                        } else {
+                            teamSuggestionP.textContent = `Error suggesting team: ${data.detail || data.error || 'Unknown error'}`;
+                            ticketTeamSelect.innerHTML = '<option value="">Error loading teams</option>';
+                        }
+                    } catch (error) {
+                        console.error('Suggest team error:', error);
+                        teamSuggestionP.textContent = 'Error fetching team suggestions.';
+                        ticketTeamSelect.innerHTML = '<option value="">Error loading teams</option>';
+                    }
+                }, 500); // Debounce for 500ms
+            });
+            
+            // Submit Ticket
+            submitTicketButton.addEventListener('click', async () => {
+                const question_text = ticketQuestionTextarea.value.trim();
+                const selected_team = ticketTeamSelect.value;
+                ticketSubmissionMessage.textContent = '';
+
+                if (!question_text) {
+                    ticketSubmissionMessage.textContent = 'Please enter the issue/question.';
+                    ticketSubmissionMessage.style.color = 'red';
+                    return;
+                }
+                if (!selected_team) {
+                    ticketSubmissionMessage.textContent = 'Please select a team.';
+                    ticketSubmissionMessage.style.color = 'red';
+                    return;
+                }
+                if (!currentUserEmail) { // Ensure user is logged in
+                    ticketSubmissionMessage.textContent = 'Error: User not logged in.';
+                    ticketSubmissionMessage.style.color = 'red';
+                    return;
+                }
+
+
+                // Get last 5 chat messages for history (if any)
+                const recentChatHistory = chatHistory.slice(-5);
+                const chat_history_json = JSON.stringify(recentChatHistory);
+
+                try {
+                    // 6. Ticket Submission Functionality: URL changed to /tickets/create, payload includes email
+                    const response = await fetch('/tickets/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email: currentUserEmail, // Add email to payload
+                            question_text: question_text,
+                            chat_history_json: chat_history_json,
+                            selected_team: selected_team
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        ticketSubmissionMessage.textContent = 'Ticket created successfully!';
+                        ticketSubmissionMessage.style.color = 'green';
+                        setTimeout(() => { // Hide modal after a short delay
+                            hideTicketModal();
+                            ticketQuestionTextarea.value = ''; // Clear form
+                            ticketTeamSelect.innerHTML = ''; 
+                        }, 2000);
+                    } else {
+                        ticketSubmissionMessage.textContent = `Error: ${data.detail || data.error || 'Could not create ticket.'}`;
+                        ticketSubmissionMessage.style.color = 'red';
+                    }
+                } catch (error) {
+                    console.error('Create ticket error:', error);
+                    ticketSubmissionMessage.textContent = 'An error occurred while creating the ticket.';
+                    ticketSubmissionMessage.style.color = 'red';
+                }
+            });
+
+
+            // Initial UI State
+            showLogin();
         });
-        
-        // Initially disable the chat button until login
-        document.getElementById('sendPromptButton').disabled = true;
     </script>
 </body>
 </html>
