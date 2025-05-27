@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI Frontend</title>
+</head>
+<body>
+    <h1>FastAPI Frontend</h1>
+    <div id="login-section">
+        <h2>Login</h2>
+        <input type="email" id="email" placeholder="Enter your email">
+        <button id="loginButton">Login</button>
+    </div>
+    <div id="chat-section">
+        <h2>RAG Chat</h2>
+        <textarea id="prompt" placeholder="Enter your chat prompt"></textarea>
+        <button id="sendPromptButton">Send</button>
+    </div>
+    <div id="response-area">
+        <!-- Messages and responses will be displayed here -->
+    </div>
+
+    <script>
+        let currentUserEmail = null; // Variable to store the logged-in user's email
+
+        document.getElementById('loginButton').addEventListener('click', async () => {
+            const emailInput = document.getElementById('email');
+            const email = emailInput.value;
+            const responseArea = document.getElementById('response-area');
+            responseArea.innerHTML = ''; // Clear previous messages
+
+            if (!email) {
+                responseArea.innerHTML = '<p style="color: red;">Please enter your email.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: email }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentUserEmail = email; // Store email on successful login
+                    responseArea.innerHTML = `<p style="color: green;">Login successful! Email: ${currentUserEmail}</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    console.log("Login successful:", data);
+                     document.getElementById('sendPromptButton').disabled = false; // Enable chat button
+                } else {
+                    currentUserEmail = null; // Reset email on failed login
+                    responseArea.innerHTML = `<p style="color: red;">Login failed: ${data.detail || response.statusText}</p>`;
+                    console.error("Login failed:", data);
+                    document.getElementById('sendPromptButton').disabled = true; // Keep chat button disabled
+                }
+            } catch (error) {
+                currentUserEmail = null; // Reset email on error
+                responseArea.innerHTML = `<p style="color: red;">An error occurred during login: ${error.message}</p>`;
+                console.error("Login fetch error:", error);
+                document.getElementById('sendPromptButton').disabled = true; // Keep chat button disabled
+            }
+        });
+
+        document.getElementById('sendPromptButton').addEventListener('click', async () => {
+            const promptInput = document.getElementById('prompt');
+            const prompt = promptInput.value;
+            const responseArea = document.getElementById('response-area');
+
+            if (!currentUserEmail) {
+                responseArea.innerHTML += '<p style="color: red;">Please login first to use the chat.</p>';
+                return;
+            }
+
+            if (!prompt) {
+                responseArea.innerHTML += '<p style="color: red;">Please enter a prompt.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/rag/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: currentUserEmail, prompt: prompt }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    responseArea.innerHTML += `<p style="color: blue;">You: ${prompt}</p><p style="color: green;">Chatbot: ${data.response || JSON.stringify(data, null, 2)}</p>`;
+                    promptInput.value = ''; // Clear the prompt input
+                } else {
+                    responseArea.innerHTML += `<p style="color: red;">Chat error: ${data.detail || response.statusText}</p>`;
+                    console.error("Chat error:", data);
+                }
+            } catch (error) {
+                responseArea.innerHTML += `<p style="color: red;">An error occurred during chat: ${error.message}</p>`;
+                console.error("Chat fetch error:", error);
+            }
+        });
+        
+        // Initially disable the chat button until login
+        document.getElementById('sendPromptButton').disabled = true;
+    </script>
+</body>
+</html>

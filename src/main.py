@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from src.auth_service import fetch_user_access_profile
 from src.config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS
 from src.rag_processor import RAGService
@@ -6,8 +7,11 @@ from src.ticket_system import suggest_ticket_team, create_ticket
 from src.feedback_system import record_feedback
 from src.database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
 import logging # Added
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="../static"), name="static")
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +32,7 @@ async def startup_event():
 
 @app.get("/")
 async def root():
-    return {"message": "FastAPI is running"}
+    return FileResponse("../static/index.html")
 
 @app.post("/auth/login")
 async def login(credentials: AuthCredentials):
