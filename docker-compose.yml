@@ -64,6 +64,12 @@ services:
         condition: service_healthy # Wait for minio to be healthy
     networks:
       - milvus_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   app:
     build: . # Assumes Dockerfile is in the project root
@@ -73,6 +79,7 @@ services:
       standalone: # Depends on the Milvus standalone service
         condition: service_healthy # Wait for Milvus to be healthy
     volumes:
+      - ./app:/app # app source code
       - ./data:/data # Application-specific data
       # If you need to share files with Milvus directly, configure here.
       # For now, assuming documents are processed by the app and pushed to Milvus.
