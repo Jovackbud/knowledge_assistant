@@ -114,7 +114,7 @@ DEFAULT_USER_PROFILE = {
     "project_tags": ["GENERAL_PROJECT"],
     "role_tags": ["MEMBER_ROLE"],
     "hierarchy_level": 0,
-    "custom_permissions": [] # e.g., ["view_sensitive_reports"]
+    "custom_permissions": [], # e.g., ["view_sensitive_reports"]
     "HR": ["payroll", "leave", "benefits", "employee"], # Generic HR keywords
     "IT": ["password", "laptop", "network", "software"],
     "Helpdesk": ["login", "account", "issue", "access"],
