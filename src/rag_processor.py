@@ -1,7 +1,7 @@
 import logging
 import json
 from pymilvus import utility, connections, Collection
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from langchain_milvus import Milvus
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.llms import Ollama
@@ -115,15 +115,15 @@ class RAGService:
             logger.error(f"RAG: Milvus vector store init failed for '{collection_name}': {e}", exc_info=True)
             raise
 
-    def get_rag_chain(self, user_email: str):
-        user_profile = fetch_user_access_profile(user_email)
+    def get_rag_chain(self, user_profile: Optional[Dict[str, Any]]):
 
         if not user_profile:
-            logger.warning(f"No user profile for {user_email}. Using empty retriever.")
+            logger.warning(f"No user profile provided to get_rag_chain. Using empty retriever.")
             retriever = EmptyRetriever()
         else:
+            user_email_for_log = user_profile.get("user_email", "Unkown User")
             filter_expr = self._build_filter_expression(user_profile)
-            logger.info(f"User '{user_email}' filter expression: {filter_expr}")
+            logger.info(f"User '{user_email_for_log}' filter expression: {filter_expr}")
             retriever = self.vector_store.as_retriever(
                 search_kwargs={"param": {"expr": filter_expr}, "k": 3}  # k = num docs
             )

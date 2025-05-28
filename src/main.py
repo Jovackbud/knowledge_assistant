@@ -106,8 +106,8 @@ async def create_ticket_endpoint(request: CreateTicketRequest):
         ticket_id = create_ticket(
             user_email=request.email,
             question=request.question_text,
-            chat_history_json=request.chat_history_json,
-            selected_team=request.selected_team
+            chat_history=request.chat_history_json,
+            final_selected_team=request.selected_team
         )
         if ticket_id:
             return {"message": "Ticket created successfully", "ticket_id": ticket_id}
@@ -117,7 +117,7 @@ async def create_ticket_endpoint(request: CreateTicketRequest):
     except HTTPException as http_exc: # Re-raise HTTPException
         raise http_exc
     except Exception as e:
-        # Log the exception e
+        logger.error(f"Error creating ticket: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error creating ticket: {str(e)}")
 
 # --- Feedback System Endpoint ---
@@ -129,7 +129,7 @@ async def record_feedback_endpoint(request: FeedbackRequest):
             user_email=request.email,
             question=request.question,
             answer=request.answer,
-            feedback_type=request.feedback_type
+            rating=request.feedback_type
         )
         return {"message": "Feedback recorded successfully"}
     except Exception as e:
