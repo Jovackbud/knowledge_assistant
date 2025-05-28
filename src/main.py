@@ -1,13 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi import APIRouter
 from src.auth_service import fetch_user_access_profile
 from src.config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS
 from src.rag_processor import RAGService
 from src.ticket_system import suggest_ticket_team, create_ticket
 from src.feedback_system import record_feedback
-from src.database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
-import logging # Added
-from fastapi.staticfiles import StaticFiles
+from src.database_utils import init_all_databases, _create_sample_users_if_not_exist, add_or_update_user_profile
+import logging 
+#from src.config import UserProfileUpdate
 from pathlib import Path
 import os
 
