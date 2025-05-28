@@ -34,7 +34,8 @@ class RAGService:
         self.vector_store = vector_store
         self.llm = llm
         self.prompt_template = ChatPromptTemplate.from_template(
-            "You are a Company Knowledge Assistant. Answer the question based *only* on the provided context. "
+            "You are an internal Knowledge Assistant for the organization called African Institute for Artificial Intelligence (AI4AI)." \
+            "Answer the question based *only* on the provided context. "
             "If the context is empty or doesn't contain the answer, state that you don't have sufficient information from the documents.\n\n"
             "Context:\n{context}\n\n"
             "Question: {question}\n\n"

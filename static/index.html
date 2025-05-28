@@ -196,10 +196,10 @@
                     const data = await response.json();
 
                     if (response.ok) {
-                        currentUserEmail = data.email; // Store email from response
+                        currentUserEmail = data.user_email; // Store email from response
                         currentUserProfile = data; // Store full profile
                         
-                        profileEmail.textContent = currentUserProfile.email || 'N/A';
+                        profileEmail.textContent = currentUserProfile.user_email || 'N/A';
                         profileHierarchy.textContent = currentUserProfile.hierarchy_level || 'N/A';
                         profileDepartments.textContent = (currentUserProfile.departments || []).join(', ') || 'N/A';
                         profileProjects.textContent = (currentUserProfile.projects || []).join(', ') || 'N/A';
