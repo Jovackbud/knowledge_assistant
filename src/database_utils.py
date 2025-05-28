@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Optional, List, Any
 from config import (
     TICKET_DB_PATH, FEEDBACK_DB_PATH, AUTH_DB_PATH,
-    DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL
+    DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL, DEFAULT_DEPARTMENT_TAG
 )
 
 logger = logging.getLogger(__name__)
@@ -213,25 +213,25 @@ def _create_sample_users_if_not_exist():
     sample_users = {
         "staff.hr@example.com": {
             "user_hierarchy_level": 0,  # Staff
-            "departments": [KNOWN_DEPARTMENT_TAGS[0] if KNOWN_DEPARTMENT_TAGS else "HR"],
+            "departments": [KNOWN_DEPARTMENT_TAGS[0] if KNOWN_DEPARTMENT_TAGS else DEFAULT_DEPARTMENT_TAG],
             "projects_membership": [],
             "contextual_roles": {}
         },
         "lead.it.project_alpha@example.com": {
             "user_hierarchy_level": 1,  # Manager level for a lead
-            "departments": [KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else "IT"],
+            "departments": [KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else DEFAULT_DEPARTMENT_TAG],
             "projects_membership": ["PROJECT_ALPHA", "PROJECT_INTERNAL_INFRA"],
             "contextual_roles": {
                 "PROJECT_ALPHA": [sample_lead_role],
-                (KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else "IT"): [sample_admin_role]
+                (KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else DEFAULT_DEPARTMENT_TAG): [sample_admin_role]
             }
         },
         "exec.finance@example.com": {
             "user_hierarchy_level": 2,  # Executive
-            "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else "FINANCE"],
+            "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG],
             "projects_membership": ["PROJECT_BUDGET_Q4"],
             "contextual_roles": {
-                (KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else "FINANCE"): [
+                (KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG): [
                     "DEPARTMENT_HEAD_ROLE"]
             }
         },

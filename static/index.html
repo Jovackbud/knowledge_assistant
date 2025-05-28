@@ -200,10 +200,10 @@
                         currentUserProfile = data; // Store full profile
                         
                         profileEmail.textContent = currentUserProfile.user_email || 'N/A';
-                        profileHierarchy.textContent = currentUserProfile.hierarchy_level || 'N/A';
+                        profileHierarchy.textContent = currentUserProfile.user_hierarchy_level  || 'N/A';
                         profileDepartments.textContent = (currentUserProfile.departments || []).join(', ') || 'N/A';
-                        profileProjects.textContent = (currentUserProfile.projects || []).join(', ') || 'N/A';
-                        profileRoles.textContent = (currentUserProfile.roles || []).join(', ') || 'N/A';
+                        profileProjects.textContent = (currentUserProfile.projects_membership || []).join(', ') || 'N/A';
+                        profileRoles.textContent = JSON.stringify(currentUserProfile.contextual_roles) || 'N/A';
                         
                         showChat();
                         emailInput.value = ''; // Clear login input
