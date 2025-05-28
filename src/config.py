@@ -14,24 +14,24 @@ ALLOWED_EXTENSIONS = [".txt", ".pdf", ".md"]
 DOCS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # --- Document Metadata Defaults and Conventions ---
-DEFAULT_DEPARTMENT_TAG = "GENERAL_DEPARTMENT"
-DEFAULT_PROJECT_TAG = "GENERAL_PROJECT"
+DEFAULT_DEPARTMENT_TAG = "GENERAL"
+DEFAULT_PROJECT_TAG = "GENERAL"
 DEFAULT_HIERARCHY_LEVEL = 0  # e.g., Staff/Member
-DEFAULT_ROLE_TAG = "MEMBER_ROLE" # Default role if no specific role folder found
+DEFAULT_ROLE_TAG = "MEMBER" # Default role if no specific role folder found
 
 # Known department tags for path parsing. Case-insensitive matching for path parts.
 KNOWN_DEPARTMENT_TAGS = [
-    "HR_DEPARTMENT", "IT_DEPARTMENT", "FINANCE_DEPARTMENT",
-    "LEGAL_DEPARTMENT", "MARKETING_DEPARTMENT", "OPERATIONS_DEPARTMENT", "SALES_DEPARTMENT"
+    "HR", "IT", "FINANCE",
+    "LEGAL", "MARKETING", "OPERATIONS", "SALES"
 ]
 
 # Mapping for role-specific folder names to role tags. Folder names are matched case-insensitively.
 # Value is the role tag stored in metadata.
 ROLE_SPECIFIC_FOLDER_TAGS = {
-    "lead_docs": "LEAD_ROLE",
-    "admin_files": "ADMIN_ROLE",
-    "manager_exclusive": "MANAGER_ROLE", # More specific than hierarchy based manager
-    "team_lead_private": "TEAM_LEAD_ROLE"
+    "lead_docs": "LEAD",
+    "admin_files": "ADMIN",
+    "manager_exclusive": "MANAGER", # More specific than hierarchy based manager
+    "team_lead_private": "TEAM_LEAD"
 }
 
 # Mapping for folder names to hierarchy levels. Matched case-insensitively.
@@ -50,8 +50,8 @@ HIERARCHY_LEVELS_CONFIG = {
 # Path structure examples:
 # DOCS_FOLDER/PROJECT_X/file.pdf
 # DOCS_FOLDER/PROJECT_X/lead_docs/plan.pdf
-# DOCS_FOLDER/HR_DEPARTMENT/PROJECT_Y/STAFF_0_GUIDELINES/onboarding.pdf
-# DOCS_FOLDER/IT_DEPARTMENT/PROJECT_Z/manager_exclusive/MANAGER_1_REPORTS/status.pdf
+# DOCS_FOLDER/HR/PROJECT_Y/STAFF_0_GUIDELINES/onboarding.pdf
+# DOCS_FOLDER/IT/PROJECT_Z/manager_exclusive/MANAGER_1_REPORTS/status.pdf
 
 # --- Milvus Configuration ---
 MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
@@ -110,8 +110,8 @@ class FeedbackRequest(BaseModel):
 DEFAULT_USER_PROFILE = {
     "user_id": "default_user", # Should be unique per user
     "email": "user@example.com",
-    "department_tags": ["GENERAL_DEPARTMENT"],
-    "project_tags": ["GENERAL_PROJECT"],
+    "department_tags": ["GENERAL"],
+    "project_tags": ["GENERAL"],
     "role_tags": ["MEMBER_ROLE"],
     "hierarchy_level": 0,
     "custom_permissions": [], # e.g., ["view_sensitive_reports"]

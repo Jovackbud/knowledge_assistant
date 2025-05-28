@@ -213,25 +213,25 @@ def _create_sample_users_if_not_exist():
     sample_users = {
         "staff.hr@example.com": {
             "user_hierarchy_level": 0,  # Staff
-            "departments": [KNOWN_DEPARTMENT_TAGS[0] if KNOWN_DEPARTMENT_TAGS else "HR_DEPARTMENT"],
+            "departments": [KNOWN_DEPARTMENT_TAGS[0] if KNOWN_DEPARTMENT_TAGS else "HR"],
             "projects_membership": [],
             "contextual_roles": {}
         },
         "lead.it.project_alpha@example.com": {
             "user_hierarchy_level": 1,  # Manager level for a lead
-            "departments": [KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else "IT_DEPARTMENT"],
+            "departments": [KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else "IT"],
             "projects_membership": ["PROJECT_ALPHA", "PROJECT_INTERNAL_INFRA"],
             "contextual_roles": {
                 "PROJECT_ALPHA": [sample_lead_role],
-                (KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else "IT_DEPARTMENT"): [sample_admin_role]
+                (KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else "IT"): [sample_admin_role]
             }
         },
         "exec.finance@example.com": {
             "user_hierarchy_level": 2,  # Executive
-            "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else "FINANCE_DEPARTMENT"],
+            "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else "FINANCE"],
             "projects_membership": ["PROJECT_BUDGET_Q4"],
             "contextual_roles": {
-                (KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else "FINANCE_DEPARTMENT"): [
+                (KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else "FINANCE"): [
                     "DEPARTMENT_HEAD_ROLE"]
             }
         },
