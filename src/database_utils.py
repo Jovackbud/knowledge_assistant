@@ -226,6 +226,15 @@ def _create_sample_users_if_not_exist():
                 (KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else DEFAULT_DEPARTMENT_TAG): [sample_admin_role]
             }
         },
+         "exec.chairman@example.com": {
+            "user_hierarchy_level": 3,  # Board
+            "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG],
+            "projects_membership": ["PROJECT_BUDGET_Q4"],
+            "contextual_roles": {
+                (KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG): [
+                    "DEPARTMENT_HEAD_ROLE"]
+            }
+        },
         "exec.finance@example.com": {
             "user_hierarchy_level": 2,  # Executive
             "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG],
