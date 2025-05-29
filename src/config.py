@@ -47,6 +47,8 @@ HIERARCHY_LEVELS_CONFIG = {
     "BOARD": 3,
     "C_LEVEL": 3 # Alias
 }
+ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
+
 # Path structure examples:
 # DOCS_FOLDER/PROJECT_X/file.pdf
 # DOCS_FOLDER/PROJECT_X/lead_docs/plan.pdf

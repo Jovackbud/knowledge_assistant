@@ -8,7 +8,7 @@
         body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
         .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         .hidden { display: none; }
-        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section, #admin-permissions-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
         #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
         .chat-message { margin-bottom: 10px; }
         .user-message { text-align: right; color: #007bff; }
@@ -45,6 +45,35 @@
             <p><strong>Projects:</strong> <span id="profile-projects"></span></p>
             <p><strong>Roles:</strong> <span id="profile-roles"></span></p>
             <button id="logoutButton">Logout</button>
+        </div>
+
+        <!-- Admin Permissions Section (hidden by default) -->
+        <div id="admin-permissions-section" class="hidden">
+            <h2>Admin Panel - User Permissions</h2>
+            <form id="admin-permissions-form">
+                <div>
+                    <label for="target-user-email">Target User Email:</label>
+                    <input type="email" id="target-user-email" required>
+                </div>
+                <div>
+                    <label for="target-hierarchy-level">New Hierarchy Level:</label>
+                    <input type="number" id="target-hierarchy-level">
+                </div>
+                <div>
+                    <label for="target-departments">New Departments (comma-separated):</label>
+                    <input type="text" id="target-departments" placeholder="e.g., HR,IT,Finance">
+                </div>
+                <div>
+                    <label for="target-projects">New Projects (comma-separated):</label>
+                    <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha,ProjectBeta">
+                </div>
+                <div>
+                    <label for="target-contextual-roles">New Contextual Roles (JSON string):</label>
+                    <textarea id="target-contextual-roles" rows="3" placeholder='e.g., {"PROJECT_X": ["LEAD"], "DEPARTMENT_Y": ["REVIEWER"]}'></textarea>
+                </div>
+                <button type="submit" id="updatePermissionsButton">Update Permissions</button>
+            </form>
+            <div id="admin-permissions-message" style="margin-top: 10px;"></div>
         </div>
 
         <!-- Chat Section (hidden by default) -->
@@ -100,6 +129,7 @@
             const feedbackSection = document.getElementById('feedback-section');
             const ticketCreationTrigger = document.getElementById('ticket-creation-trigger');
             const ticketModal = document.getElementById('ticket-modal');
+            const adminPermissionsSection = document.getElementById('admin-permissions-section'); // Added
 
             const emailInput = document.getElementById('email');
             const loginButton = document.getElementById('loginButton');
@@ -128,6 +158,16 @@
             const submitTicketButton = document.getElementById('submitTicketButton');
             const cancelTicketButton = document.getElementById('cancelTicketButton');
             const ticketSubmissionMessage = document.getElementById('ticket-submission-message');
+            
+            // Admin Panel Elements
+            const adminPermissionsForm = document.getElementById('admin-permissions-form');
+            const targetUserEmailInput = document.getElementById('target-user-email');
+            const targetHierarchyLevelInput = document.getElementById('target-hierarchy-level');
+            const targetDepartmentsInput = document.getElementById('target-departments');
+            const targetProjectsInput = document.getElementById('target-projects');
+            const targetContextualRolesInput = document.getElementById('target-contextual-roles');
+            const adminPermissionsMessage = document.getElementById('admin-permissions-message');
+
 
             // State Variables
             let currentUserEmail = null;
@@ -144,6 +184,7 @@
                 feedbackSection.classList.add('hidden');
                 ticketCreationTrigger.classList.add('hidden');
                 ticketModal.classList.add('hidden');
+                adminPermissionsSection.classList.add('hidden'); // Hide admin panel on initial login screen
             }
 
             function showProfile() {
@@ -207,6 +248,13 @@
                         
                         showChat();
                         emailInput.value = ''; // Clear login input
+
+                        // Show admin panel if user is admin (level 3)
+                        if (currentUserProfile.user_hierarchy_level === 3) {
+                            adminPermissionsSection.classList.remove('hidden');
+                        } else {
+                            adminPermissionsSection.classList.add('hidden');
+                        }
                     } else {
                         loginError.textContent = data.detail || data.error || 'Login failed. Please check your email.'; // FastAPI often uses "detail" for errors
                         currentUserEmail = null;
@@ -237,6 +285,9 @@
                 profileRoles.textContent = '';
                 
                 hideFeedback();
+                adminPermissionsSection.classList.add('hidden'); // Hide admin panel on logout
+                adminPermissionsMessage.textContent = ''; // Clear admin messages
+                adminPermissionsForm.reset(); // Reset admin form
                 showLogin();
                 // No alert needed for client-side only operation
             });
@@ -462,6 +513,108 @@
 
             // Initial UI State
             showLogin();
+
+            // --- Admin Permissions Form Submission ---
+            adminPermissionsForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                adminPermissionsMessage.textContent = '';
+                adminPermissionsMessage.style.color = 'red'; // Default to red for errors
+
+                if (!currentUserEmail || !currentUserProfile || currentUserProfile.user_hierarchy_level !== 3) {
+                    adminPermissionsMessage.textContent = 'Error: Admin privileges required. Please re-login.';
+                    return;
+                }
+
+                const targetEmail = targetUserEmailInput.value.trim();
+                if (!targetEmail) {
+                    adminPermissionsMessage.textContent = 'Target User Email is required.';
+                    return;
+                }
+
+                const permissions = {};
+                const hierarchyLevel = targetHierarchyLevelInput.value.trim();
+                if (hierarchyLevel) {
+                    permissions.user_hierarchy_level = parseInt(hierarchyLevel, 10);
+                    if (isNaN(permissions.user_hierarchy_level)) {
+                        adminPermissionsMessage.textContent = 'Invalid Hierarchy Level. Must be a number.';
+                        return;
+                    }
+                }
+
+                const departmentsStr = targetDepartmentsInput.value.trim();
+                if (departmentsStr) {
+                    permissions.departments = departmentsStr.split(',').map(d => d.trim()).filter(d => d);
+                } else {
+                    permissions.departments = []; // Send empty array if field is empty to clear
+                }
+
+                const projectsStr = targetProjectsInput.value.trim();
+                if (projectsStr) {
+                    permissions.projects_membership = projectsStr.split(',').map(p => p.trim()).filter(p => p);
+                } else {
+                    permissions.projects_membership = []; // Send empty array if field is empty to clear
+                }
+
+                const contextualRolesStr = targetContextualRolesInput.value.trim();
+                if (contextualRolesStr) {
+                    try {
+                        permissions.contextual_roles = JSON.parse(contextualRolesStr);
+                    } catch (e) {
+                        adminPermissionsMessage.textContent = 'Invalid JSON format for Contextual Roles. Please check syntax.';
+                        return;
+                    }
+                } else {
+                     permissions.contextual_roles = {}; // Send empty object if field is empty to clear
+                }
+                
+                if (Object.keys(permissions).length === 0) {
+                    adminPermissionsMessage.textContent = 'At least one permission field must be filled to update.';
+                    return;
+                }
+
+
+                try {
+                    const response = await fetch('/admin/user_permissions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-User-Email': currentUserEmail // Admin's email
+                        },
+                        body: JSON.stringify({
+                            target_email: targetEmail,
+                            permissions: permissions
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        adminPermissionsMessage.textContent = data.message || 'Permissions updated successfully!';
+                        adminPermissionsMessage.style.color = 'green';
+                        // Optionally clear form, or parts of it, on success
+                        // targetUserEmailInput.value = ''; // Keep target email for potential further edits
+                        targetHierarchyLevelInput.value = '';
+                        targetDepartmentsInput.value = '';
+                        targetProjectsInput.value = '';
+                        targetContextualRolesInput.value = '';
+                        
+                        // Display updated profile if returned
+                        if (data.updated_profile) {
+                            let profileDetails = "\nUpdated Profile:\n";
+                            for (const [key, value] of Object.entries(data.updated_profile)) {
+                                profileDetails += `${key}: ${JSON.stringify(value)}\n`;
+                            }
+                            adminPermissionsMessage.textContent += profileDetails;
+                        }
+
+                    } else {
+                        adminPermissionsMessage.textContent = `Error: ${data.detail || data.error || 'Failed to update permissions.'}`;
+                    }
+                } catch (error) {
+                    console.error('Admin update permissions error:', error);
+                    adminPermissionsMessage.textContent = 'An error occurred while updating permissions.';
+                }
+            });
         });
     </script>
 </body>

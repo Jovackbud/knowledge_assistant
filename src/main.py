@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
+from pydantic import BaseModel
+from typing import Dict, Any
 from fastapi.responses import FileResponse
-from src.auth_service import fetch_user_access_profile
-from src.config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS
+from src.auth_service import fetch_user_access_profile, update_user_permissions_by_admin
+from src.config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL # Added ADMIN_HIERARCHY_LEVEL
 from src.rag_processor import RAGService
 from src.ticket_system import suggest_ticket_team, create_ticket
 from src.feedback_system import record_feedback
@@ -135,3 +137,68 @@ async def record_feedback_endpoint(request: FeedbackRequest):
     except Exception as e:
         # Log the exception e
         raise HTTPException(status_code=500, detail=f"Error recording feedback: {str(e)}")
+
+# --- Admin System Endpoints ---
+
+class UserPermissionsRequest(BaseModel):
+    target_email: str
+    permissions: Dict[str, Any] # e.g., {"user_hierarchy_level": 2, "departments": ["IT"]}
+
+async def is_admin(user_email: str) -> bool:
+    """
+    Checks if the given user_email corresponds to an admin.
+    An admin is defined as a user with user_hierarchy_level == ADMIN_HIERARCHY_LEVEL.
+    """
+    if not user_email:
+        return False
+    # fetch_user_access_profile is synchronous. As this `is_admin` function is async,
+    # ideally, blocking IO like this would be run in a thread pool.
+    # e.g., from fastapi.concurrency import run_in_threadpool
+    # admin_profile = await run_in_threadpool(fetch_user_access_profile, user_email)
+    # However, to maintain consistency with the /auth/login endpoint's direct call,
+    # which is also an async def calling the synchronous fetch_user_access_profile,
+    # we will call it directly here as well.
+    admin_profile = fetch_user_access_profile(user_email)
+    if admin_profile and admin_profile.get("user_hierarchy_level") == ADMIN_HIERARCHY_LEVEL:
+        logger.info(f"Admin check: User '{user_email}' IS an admin (Level {ADMIN_HIERARCHY_LEVEL}).")
+        return True
+    
+    current_level = admin_profile.get("user_hierarchy_level") if admin_profile else "N/A"
+    logger.warning(f"Admin check: User '{user_email}' IS NOT an admin (Hierarchy Level: {current_level}, Required: {ADMIN_HIERARCHY_LEVEL}). Profile: {admin_profile}")
+    return False
+
+@app.post("/admin/user_permissions")
+async def admin_update_user_permissions(
+    payload: UserPermissionsRequest,
+    x_user_email: str = Header(None, alias="X-User-Email") # Extract admin's email from header
+):
+    """
+    Admin endpoint to update user permissions.
+    The admin's email must be provided in the 'X-User-Email' header.
+    """
+    logger.info(f"Received request to update permissions for '{payload.target_email}' by user '{x_user_email}'.")
+
+    if not x_user_email:
+        logger.warning("Admin endpoint call missing X-User-Email header.")
+        raise HTTPException(status_code=400, detail="X-User-Email header is required.")
+
+    # Verify if the requesting user is an admin
+    if not await is_admin(x_user_email):
+        logger.warning(f"Unauthorized attempt to update permissions by non-admin user '{x_user_email}'.")
+        raise HTTPException(status_code=403, detail="Forbidden: Requesting user is not an admin.")
+
+    try:
+        # Call the auth_service function to update permissions
+        # This function is currently a placeholder
+        update_result = update_user_permissions_by_admin(
+            target_email=payload.target_email,
+            new_permissions=payload.permissions
+        )
+        logger.info(f"Permissions update call for '{payload.target_email}' by admin '{x_user_email}' completed. Result: {update_result}")
+        return update_result
+    except Exception as e:
+        logger.error(f"Error during admin update of permissions for '{payload.target_email}' by '{x_user_email}': {e}", exc_info=True)
+        # Check if it's an HTTPException from a deeper call (like user not found if implemented in auth_service)
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
