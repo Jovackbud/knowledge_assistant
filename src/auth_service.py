@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Optional, Any
 from src.database_utils import get_user_profile, add_or_update_user_profile
-from config import DEFAULT_HIERARCHY_LEVEL
+from src.config import DEFAULT_HIERARCHY_LEVEL, ADMIN_REQUIRED_HIERARCHY_LEVEL
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,23 @@ def fetch_user_access_profile(user_email: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Error fetching or validating profile for {user_email}: {e}", exc_info=True)
         return None
 
+def is_admin(user_profile: Optional[Dict[str, Any]]) -> bool:
+    """
+    Checks if a user profile indicates admin privileges based on hierarchy level.
+    Requires the user_hierarchy_level to be >= ADMIN_REQUIRED_HIERARCHY_LEVEL.
+    Additional admin checks (like specific roles) could be added here if needed.
+    """
+    if not user_profile:
+        return False
+    
+    # Safely get hierarchy level, defaulting if missing or wrong type
+    user_level = user_profile.get("user_hierarchy_level", DEFAULT_HIERARCHY_LEVEL)
+    if not isinstance(user_level, int):
+         user_level = DEFAULT_HIERARCHY_LEVEL # Default if type is wrong
+
+    is_user_admin = user_level >= ADMIN_REQUIRED_HIERARCHY_LEVEL
+    # logger.debug(f"Is user {user_profile.get('user_email', 'N/A')} admin? {is_user_admin} (Level: {user_level}, Required: {ADMIN_REQUIRED_HIERARCHY_LEVEL})") # Optional debug logging
+    return is_user_admin
 
 def get_or_create_test_user_profile(user_email: str) -> Optional[Dict[str, Any]]:
     """

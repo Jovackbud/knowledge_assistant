@@ -3,24 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Knowledge Assistant - Flask</title>
+    <title>Company Knowledge Assistant</title> <!-- Title updated -->
     <style>
         body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-radius: 8px; } /* Added border-radius */
         .hidden { display: none; }
-        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-        #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
-        .chat-message { margin-bottom: 10px; }
-        .user-message { text-align: right; color: #007bff; }
-        .assistant-message { text-align: left; color: #28a745; }
-        label { display: block; margin-bottom: 5px; }
-        input[type='email'], input[type='text'], textarea, select { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+        /* Combined styling for main sections */
+        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-creation-trigger, #admin-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background-color: #fff; } /* Added background-color */
+
+        #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; border-radius: 4px; } /* Added border-radius */
+        .chat-message { margin-bottom: 10px; padding: 8px; border-radius: 5px; max-width: 80%; } /* Added padding, border-radius, max-width */
+        .user-message { text-align: right; color: #007bff; background-color: #e9f5ff; margin-left: auto; } /* Added background, margin */
+        .assistant-message { text-align: left; color: #101d13; background-color: #e9ffeb; margin-right: auto; } /* Added background, margin */
+
+        label { display: block; margin-bottom: 5px; font-weight: bold; } /* Added font-weight */
+        input[type='email'], input[type='text'], input[type='number'], textarea, select { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; } /* Added box-sizing */
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; transition: background-color 0.2s ease; } /* Added transition */
         button:hover { background-color: #0056b3; }
         #feedback-buttons button { background-color: #6c757d; }
         #feedback-buttons button:hover { background-color: #545b62; }
-        #ticket-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000; border-radius: 8px; }
-        #ticket-form-container { width: 400px; }
+        button.deleteUserButton { background-color: #dc3545; } /* Style delete button */
+        button.deleteUserButton:hover { background-color: #c82333; }
+        button.editUserButton { background-color: #ffc107; color: #212529;} /* Style edit button */
+         button.editUserButton:hover { background-color: #e0a800;}
+
+
+        /* Modal Styling (Ticket and User Form) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+            z-index: 999; /* Below modal, above everything else */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+             /* Allow clicking through overlay if needed for debugging, but block for modals */
+             /* pointer-events: auto; */
+        }
+
+        #ticket-modal > div, #user-form-modal > div { /* Style the inner container within the overlay */
+            background-color: white;
+            padding: 30px; /* Increased padding */
+            box-shadow: 0 0 20px rgba(0,0,0,0.3); /* Stronger shadow */
+            z-index: 1000; /* Make sure the modal content is above the overlay */
+            border-radius: 8px;
+            max-width: 500px; /* Max width for modals */
+            width: 90%; /* Responsive width */
+            box-sizing: border-box; /* Include padding in width */
+             /* Disable pointer events on the overlay, re-enable on the content */
+            pointer-events: auto;
+        }
+
+         #ticket-form-container, #user-form-container {
+             width: 100%; /* Make form container fill the modal width */
+         }
+
+
+        /* Admin Table Styling */
+        #user-list-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        #user-list-container th, #user-list-container td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+             vertical-align: top; /* Align content to top */
+        }
+        #user-list-container th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        #user-list-container tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+         #user-list-container td button {
+             padding: 5px 10px; /* Smaller buttons in table */
+             font-size: 0.9em;
+             margin-bottom: 5px; /* Add margin between buttons */
+         }
+         /* Make Roles column wrap text */
+         #user-list-container td:nth-child(5) {
+             white-space: pre-wrap; /* Allow wrapping */
+             word-break: break-word; /* Break long words */
+             max-width: 200px; /* Limit width - slightly wider */
+             font-family: monospace; /* Use monospace font for JSON */
+             font-size: 0.9em;
+             background-color: #f0f0f0; /* Slight background to distinguish */
+         }
+
     </style>
 </head>
 <body>
@@ -38,13 +113,14 @@
 
         <!-- User Profile Section (hidden by default) -->
         <div id="user-profile-section" class="hidden">
-            <h2>User Profile</h2>
+            <h2>Your Profile</h2> <!-- Updated Heading -->
             <p><strong>Email:</strong> <span id="profile-email"></span></p>
             <p><strong>Hierarchy Level:</strong> <span id="profile-hierarchy"></span></p>
             <p><strong>Departments:</strong> <span id="profile-departments"></span></p>
             <p><strong>Projects:</strong> <span id="profile-projects"></span></p>
             <p><strong>Roles:</strong> <span id="profile-roles"></span></p>
             <button id="logoutButton">Logout</button>
+             <!-- Admin Panel Button will be added here dynamically by JS if user is admin -->
         </div>
 
         <!-- Chat Section (hidden by default) -->
@@ -70,26 +146,73 @@
             <hr>
             <button id="openTicketModalButton">Create Support Ticket</button>
         </div>
-        
-        <!-- Ticket Modal (hidden by default) -->
-        <div id="ticket-modal" class="hidden">
-            <div id="ticket-form-container">
-                <h2>New Support Ticket</h2>
-                <label for="ticket-question">Issue/Question:</label>
-                <textarea id="ticket-question" rows="3"></textarea>
-                
-                <label for="ticket-team">Team:</label>
-                <select id="ticket-team">
-                    <!-- Options will be populated dynamically -->
-                </select>
-                <p id="team-suggestion"></p>
 
-                <button id="submitTicketButton">Submit Ticket</button>
-                <button id="cancelTicketButton">Cancel</button>
-                <p id="ticket-submission-message" style="color: green;"></p>
+         <!-- Admin User Management Section (hidden by default, inside container) -->
+        <div id="admin-section" class="hidden"> <!-- Removed .container class here -->
+            <h2>Admin User Management</h2>
+            <button id="showUsersButton">Refresh User List</button>
+            <button id="addNewUserButton">Add New User</button>
+            <p id="admin-message" style="color: green;"></p>
+
+            <h3>Existing Users</h3>
+            <div id="user-list-container">
+                <!-- User list table/content will be loaded here by JS -->
+                Loading users...
             </div>
+             <button id="hideAdminButton" style="margin-top: 20px;">Back to Chat</button>
+        </div>
+
+    </div> <!-- End of .container -->
+
+    <!-- Ticket Modal (hidden by default, outside container for overlay effect) -->
+    <div id="ticket-modal" class="modal-overlay hidden">
+        <div id="ticket-form-container">
+            <h2>New Support Ticket</h2>
+            <label for="ticket-question">Issue/Question:</label>
+            <textarea id="ticket-question" rows="3"></textarea>
+
+            <label for="ticket-team">Team:</label>
+            <select id="ticket-team">
+                <!-- Options will be populated dynamically -->
+                <option value="">Loading teams...</option> <!-- Initial placeholder -->
+            </select>
+            <p id="team-suggestion"></p>
+
+            <button id="submitTicketButton">Submit Ticket</button>
+            <button id="cancelTicketButton">Cancel</button>
+            <p id="ticket-submission-message" style="color: green;"></p>
         </div>
     </div>
+
+    <!-- Add/Edit User Modal (hidden by default, outside container for overlay effect) -->
+    <div id="user-form-modal" class="modal-overlay hidden">
+        <div id="user-form-container">
+            <h2>User Profile</h2>
+            <input type="hidden" id="user-form-email-hidden"> <!-- Hidden field for email in edit mode -->
+
+            <label for="user-form-email-display">Email:</label>
+            <input type="email" id="user-form-email-display" placeholder="user@example.com" required>
+
+            <label for="user-form-hierarchy">Hierarchy Level:</label>
+            <input type="number" id="user-form-hierarchy" value="0" min="0" required>
+
+            <label for="user-form-departments">Departments (comma-separated):</label>
+            <input type="text" id="user-form-departments" placeholder="HR, IT">
+
+            <label for="user-form-projects">Projects (comma-separated):</label>
+            <input type="text" id="user-form-projects" placeholder="PROJECT_ALPHA, PROJECT_BETA">
+
+            <label for="user-form-roles">Contextual Roles (JSON format):</label>
+            <textarea id="user-form-roles" rows="4" placeholder='{"PROJECT_ALPHA": ["LEAD"], "HR": ["ADMIN"]}'>{}</textarea> <!-- Example added -->
+            <small>Enter as valid JSON object, e.g., {"ContextTag": ["RoleA", "RoleB"]}</small>
+
+
+            <button id="saveUserButton">Save User</button>
+            <button id="cancelUserButton">Cancel</button>
+            <p id="user-form-message" style="color: green;"></p>
+        </div>
+    </div>
+
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -99,7 +222,7 @@
             const chatSection = document.getElementById('chat-section');
             const feedbackSection = document.getElementById('feedback-section');
             const ticketCreationTrigger = document.getElementById('ticket-creation-trigger');
-            const ticketModal = document.getElementById('ticket-modal');
+            const ticketModal = document.getElementById('ticket-modal'); // Select the overlay div
 
             const emailInput = document.getElementById('email');
             const loginButton = document.getElementById('loginButton');
@@ -120,7 +243,7 @@
             const helpfulButton = document.getElementById('helpfulButton');
             const notHelpfulButton = document.getElementById('notHelpfulButton');
             const feedbackMessage = document.getElementById('feedback-message');
-            
+
             const openTicketModalButton = document.getElementById('openTicketModalButton');
             const ticketQuestionTextarea = document.getElementById('ticket-question');
             const ticketTeamSelect = document.getElementById('ticket-team');
@@ -129,12 +252,40 @@
             const cancelTicketButton = document.getElementById('cancelTicketButton');
             const ticketSubmissionMessage = document.getElementById('ticket-submission-message');
 
+            // NEW Admin Section Selectors
+            const adminSection = document.getElementById('admin-section');
+            const showUsersButton = document.getElementById('showUsersButton');
+            const addNewUserButton = document.getElementById('addNewUserButton');
+            const adminMessage = document.getElementById('admin-message');
+            const userListContainer = document.getElementById('user-list-container');
+            const hideAdminButton = document.getElementById('hideAdminButton');
+
+            // NEW User Form Modal Selectors
+            const userFormModal = document.getElementById('user-form-modal'); // Select the overlay div
+            const userFormContainer = userFormModal.querySelector('#user-form-container'); // Select inner container within modal
+            const userFormEmailHidden = document.getElementById('user-form-email-hidden');
+            const userFormEmailDisplay = document.getElementById('user-form-email-display');
+            const userFormHierarchy = document.getElementById('user-form-hierarchy');
+            const userFormDepartments = document.getElementById('user-form-departments');
+            const userFormProjects = document.getElementById('user-form-projects');
+            const userFormRoles = document.getElementById('user-form-roles');
+            const saveUserButton = document.getElementById('saveUserButton');
+            const cancelUserButton = document.getElementById('cancelUserButton');
+            const userFormMessage = document.getElementById('user-form-message');
+
+
             // State Variables
             let currentUserEmail = null;
             let currentUserProfile = null;
             let currentQuestion = null;
             let currentAnswer = null;
             let chatHistory = []; // To store {role: 'user'/'assistant', content: 'message'}
+
+            // NEW State Variables for Admin
+            const ADMIN_REQUIRED_HIERARCHY_LEVEL = 3; // Match this with config.py
+            let isEditMode = false; // Flag for add/edit form
+            let allFetchedUsers = []; // Store full user objects for editing
+
 
             // Visibility Functions
             function showLogin() {
@@ -143,7 +294,9 @@
                 chatSection.classList.add('hidden');
                 feedbackSection.classList.add('hidden');
                 ticketCreationTrigger.classList.add('hidden');
-                ticketModal.classList.add('hidden');
+                hideTicketModal(); // Ensure ticket modal is hidden
+                adminSection.classList.add('hidden'); // Ensure admin section is hidden
+                hideUserFormModal(); // Ensure user form modal is hidden
             }
 
             function showProfile() {
@@ -155,8 +308,12 @@
                 userProfileSection.classList.remove('hidden'); // Keep profile visible
                 chatSection.classList.remove('hidden');
                 ticketCreationTrigger.classList.remove('hidden');
+                feedbackSection.classList.add('hidden'); // Hide feedback by default
+                adminSection.classList.add('hidden'); // Ensure admin section is hidden
+                hideTicketModal(); // Ensure ticket modal is hidden
+                hideUserFormModal(); // Ensure user form modal is hidden
             }
-            
+
             function hideFeedback() {
                 feedbackSection.classList.add('hidden');
                 feedbackMessage.textContent = '';
@@ -167,12 +324,97 @@
                 feedbackSection.classList.remove('hidden');
                 feedbackMessage.textContent = ''; // Clear previous message
             }
-            
+
+            // Updated Ticket Modal Visibility
+            function showTicketModal() {
+                 ticketModal.classList.remove('hidden');
+            }
+
             function hideTicketModal() {
                 ticketModal.classList.add('hidden');
                 ticketSubmissionMessage.textContent = '';
                 teamSuggestionP.textContent = '';
                 ticketQuestionTextarea.value = '';
+            }
+
+            // NEW Admin Panel Visibility
+             function showAdminPanel() {
+                loginSection.classList.add('hidden');
+                userProfileSection.classList.remove('hidden'); // Keep profile visible
+                chatSection.classList.add('hidden'); // Hide chat
+                feedbackSection.classList.add('hidden'); // Hide feedback
+                ticketCreationTrigger.classList.add('hidden'); // Hide ticket trigger
+                hideTicketModal(); // Hide ticket modal
+                hideUserFormModal(); // Hide user form modal
+                adminSection.classList.remove('hidden'); // Show admin section
+                fetchAndDisplayUsers(); // Automatically load users when showing the panel
+            }
+
+            function hideAdminPanel() {
+                adminSection.classList.add('hidden'); // Hide admin section
+                showChat(); // Go back to the chat view
+            }
+
+            // NEW User Form Modal Visibility
+            function showUserFormModal(isEdit, userData = null) {
+                userFormModal.classList.remove('hidden');
+                isEditMode = isEdit;
+                userFormMessage.textContent = ''; // Clear message
+
+                if (isEdit) {
+                    userFormContainer.querySelector('h2').textContent = 'Edit User Profile';
+                    // Store and display the email, disable editing it
+                    userFormEmailHidden.value = userData.user_email;
+                    userFormEmailDisplay.value = userData.user_email;
+                    userFormEmailDisplay.disabled = true; // Disable email field for editing
+
+                    userFormHierarchy.value = userData.user_hierarchy_level || 0; // Use default if null/undefined
+                    userFormDepartments.value = (userData.departments || []).join(', ');
+                    userFormProjects.value = (userData.projects_membership || []).join(', ');
+                    try {
+                        // Safely display JSON roles
+                        userFormRoles.value = JSON.stringify(userData.contextual_roles || {}, null, 2); // Pretty print JSON
+                    } catch (e) {
+                        console.error("Error stringifying roles for edit:", userData.contextual_roles, e);
+                        userFormRoles.value = '{}';
+                        userFormMessage.textContent = 'Warning: Could not display roles correctly.';
+                        userFormMessage.style.color = 'orange';
+                    }
+                } else { // Add mode
+                    userFormContainer.querySelector('h2').textContent = 'Add New User';
+                    // Clear fields for new user
+                    userFormEmailHidden.value = ''; // Hidden field is empty for add
+                    userFormEmailDisplay.value = '';
+                    userFormEmailDisplay.disabled = false; // Enable email field for new user
+                    userFormHierarchy.value = 0;
+                    userFormDepartments.value = '';
+                    userFormProjects.value = '';
+                    userFormRoles.value = '{}'; // Default empty JSON object
+                }
+            }
+
+            function hideUserFormModal() {
+                userFormModal.classList.add('hidden');
+                editingUserEmail = null; // Clear editing state
+                 // Clear form fields on close
+                userFormEmailHidden.value = '';
+                userFormEmailDisplay.value = '';
+                userFormEmailDisplay.disabled = false;
+                userFormHierarchy.value = 0;
+                userFormDepartments.value = '';
+                userFormProjects.value = '';
+                userFormRoles.value = '{}';
+                userFormMessage.textContent = ''; // Clear message
+            }
+
+
+            // Append message to chat history display
+            function appendMessage(role, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chat-message', role === 'user' ? 'user-message' : 'assistant-message');
+                messageDiv.textContent = text;
+                chatHistoryDiv.appendChild(messageDiv);
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight; // Scroll to bottom
             }
 
             // --- Event Listeners ---
@@ -198,14 +440,33 @@
                     if (response.ok) {
                         currentUserEmail = data.user_email; // Store email from response
                         currentUserProfile = data; // Store full profile
-                        
+
                         profileEmail.textContent = currentUserProfile.user_email || 'N/A';
                         profileHierarchy.textContent = currentUserProfile.user_hierarchy_level  || 'N/A';
                         profileDepartments.textContent = (currentUserProfile.departments || []).join(', ') || 'N/A';
                         profileProjects.textContent = (currentUserProfile.projects_membership || []).join(', ') || 'N/A';
                         profileRoles.textContent = JSON.stringify(currentUserProfile.contextual_roles) || 'N/A';
-                        
-                        showChat();
+
+                        // Add Admin Panel button if user is admin
+                        const isAdmin = currentUserProfile.user_hierarchy_level >= ADMIN_REQUIRED_HIERARCHY_LEVEL;
+                        let adminButton = document.getElementById('adminPanelButton');
+                        if (isAdmin) {
+                            if (!adminButton) {
+                                adminButton = document.createElement('button');
+                                adminButton.id = 'adminPanelButton';
+                                adminButton.textContent = 'Admin Panel';
+                                adminButton.style.marginLeft = '10px'; // Add some spacing
+                                adminButton.addEventListener('click', showAdminPanel); // Add event listener
+                                userProfileSection.appendChild(adminButton); // Add button to profile section
+                            }
+                            adminButton.classList.remove('hidden'); // Ensure it's visible
+                        } else {
+                             if (adminButton) {
+                                 adminButton.classList.add('hidden'); // Hide if user is not admin
+                             }
+                        }
+
+                        showChat(); // Show the main chat interface
                         emailInput.value = ''; // Clear login input
                     } else {
                         loginError.textContent = data.detail || data.error || 'Login failed. Please check your email.'; // FastAPI often uses "detail" for errors
@@ -228,27 +489,23 @@
                 currentQuestion = null;
                 currentAnswer = null;
                 chatHistory = [];
-                
+
                 chatHistoryDiv.innerHTML = '';
                 profileEmail.textContent = '';
                 profileHierarchy.textContent = '';
                 profileDepartments.textContent = '';
                 profileProjects.textContent = '';
                 profileRoles.textContent = '';
-                
+
                 hideFeedback();
-                showLogin();
-                // No alert needed for client-side only operation
+                showLogin(); // Go back to login page
+                 // Optionally hide the admin button on logout
+                 const adminButton = document.getElementById('adminPanelButton');
+                 if (adminButton) {
+                     adminButton.classList.add('hidden');
+                 }
             });
 
-            // Append message to chat history display
-            function appendMessage(role, text) {
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('chat-message', role === 'user' ? 'user-message' : 'assistant-message');
-                messageDiv.textContent = text;
-                chatHistoryDiv.appendChild(messageDiv);
-                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight; // Scroll to bottom
-            }
 
             // Send Chat Message
             sendChatButton.addEventListener('click', async () => {
@@ -266,7 +523,7 @@
                     const response = await fetch('/rag/chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: currentUserEmail, prompt: prompt }) 
+                        body: JSON.stringify({ email: currentUserEmail, prompt: prompt })
                     });
                     const data = await response.json();
 
@@ -274,7 +531,7 @@
                         currentAnswer = data.response; // FastAPI returns {"response": "..."}
                         appendMessage('assistant', currentAnswer);
                         chatHistory.push({ role: 'assistant', content: currentAnswer });
-                        showFeedback();
+                        showFeedback(); // Show feedback buttons
                     } else {
                         appendMessage('assistant', `Error: ${data.detail || data.error || 'Could not get response.'}`);
                         currentAnswer = null; // No valid answer
@@ -285,16 +542,17 @@
                     currentAnswer = null;
                 }
             });
-            
+
             chatInput.addEventListener('keypress', (event) => {
                 if (event.key === 'Enter') {
+                    event.preventDefault(); // Prevent default form submission if input is in a form
                     sendChatButton.click();
                 }
             });
 
             // Feedback
             async function handleFeedback(feedbackType) {
-                if (!currentQuestion || !currentAnswer || !currentUserEmail) return; // Ensure user is logged in
+                if (!currentQuestion || !currentAnswer || !currentUserEmail) return; // Ensure user is logged in and has a question/answer
 
                 feedbackMessage.textContent = '';
                 try {
@@ -316,33 +574,38 @@
                         feedbackButtonsDiv.classList.add('hidden'); // Hide buttons after feedback
                     } else {
                         feedbackMessage.textContent = `Error: ${data.detail || data.error || 'Could not submit feedback.'}`;
+                         feedbackMessage.style.color = 'red'; // Indicate error
                     }
                 } catch (error) {
                     console.error('Feedback error:', error);
                     feedbackMessage.textContent = 'An error occurred while submitting feedback.';
+                    feedbackMessage.style.color = 'red'; // Indicate error
                 }
             }
 
             helpfulButton.addEventListener('click', () => handleFeedback('👍'));
             notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
-            // Ticket Modal
+            // Ticket Modal Trigger
             openTicketModalButton.addEventListener('click', () => {
-                ticketModal.classList.remove('hidden');
+                showTicketModal(); // Show the ticket modal
                 ticketQuestionTextarea.value = currentQuestion || ''; // Pre-fill with last question if available
                 ticketSubmissionMessage.textContent = '';
-                teamSuggestionP.textContent = '';
                 // Trigger team suggestion based on pre-filled question
                 if (ticketQuestionTextarea.value) {
+                    // Dispatch 'input' event to trigger the suggestion logic
                     ticketQuestionTextarea.dispatchEvent(new Event('input'));
+                } else {
+                    // If no question, reset team select
+                    ticketTeamSelect.innerHTML = '<option value="">Enter question to see suggestions</option>';
                 }
             });
 
             cancelTicketButton.addEventListener('click', () => {
-                hideTicketModal();
+                hideTicketModal(); // Hide the ticket modal
             });
 
-            // Team Suggestion for Ticket
+            // Team Suggestion for Ticket (using 'input' event on textarea)
             let suggestTeamTimeout;
             ticketQuestionTextarea.addEventListener('input', () => {
                 clearTimeout(suggestTeamTimeout);
@@ -368,7 +631,7 @@
                         ticketTeamSelect.innerHTML = ''; // Clear loading/previous options
                         if (response.ok) {
                             // FastAPI returns {"suggested_team": "...", "available_teams": ["TeamA", ...]}
-                            if (data.available_teams && data.available_teams.length > 0) {
+                            if (data.available_teams && Array.isArray(data.available_teams) && data.available_teams.length > 0) {
                                 data.available_teams.forEach(team => {
                                     const option = document.createElement('option');
                                     option.value = team;
@@ -381,6 +644,10 @@
                                 if (data.suggested_team) {
                                     teamSuggestionP.textContent = `Suggested Team: ${data.suggested_team}`;
                                 } else {
+                                     // Select the first team by default if no strong suggestion
+                                     if (ticketTeamSelect.options.length > 0) {
+                                        ticketTeamSelect.options[0].selected = true;
+                                     }
                                     teamSuggestionP.textContent = 'Could not determine a specific suggestion, please select a team.';
                                 }
                             } else {
@@ -390,15 +657,17 @@
                         } else {
                             teamSuggestionP.textContent = `Error suggesting team: ${data.detail || data.error || 'Unknown error'}`;
                             ticketTeamSelect.innerHTML = '<option value="">Error loading teams</option>';
+                            teamSuggestionP.style.color = 'red'; // Indicate error
                         }
                     } catch (error) {
                         console.error('Suggest team error:', error);
                         teamSuggestionP.textContent = 'Error fetching team suggestions.';
                         ticketTeamSelect.innerHTML = '<option value="">Error loading teams</option>';
+                        teamSuggestionP.style.color = 'red'; // Indicate error
                     }
                 }, 500); // Debounce for 500ms
             });
-            
+
             // Submit Ticket
             submitTicketButton.addEventListener('click', async () => {
                 const question_text = ticketQuestionTextarea.value.trim();
@@ -422,8 +691,9 @@
                 }
 
 
-                // Get last 5 chat messages for history (if any)
-                const recentChatHistory = chatHistory.slice(-5);
+                // Get recent chat history (e.g., last 5 pairs of Q&A)
+                // Ensure chatHistory only contains plain text content, not full objects if not needed
+                const recentChatHistory = chatHistory.slice(-10); // Get last 10 messages (5 user, 5 assistant)
                 const chat_history_json = JSON.stringify(recentChatHistory);
 
                 try {
@@ -434,19 +704,20 @@
                         body: JSON.stringify({
                             email: currentUserEmail, // Add email to payload
                             question_text: question_text,
-                            chat_history_json: chat_history_json,
+                            chat_history_json: chat_history_json, // Send JSON string
                             selected_team: selected_team
                         })
                     });
                     const data = await response.json();
 
                     if (response.ok) {
-                        ticketSubmissionMessage.textContent = 'Ticket created successfully!';
+                        ticketSubmissionMessage.textContent = `Ticket created successfully! ID: ${data.ticket_id || 'N/A'}`;
                         ticketSubmissionMessage.style.color = 'green';
                         setTimeout(() => { // Hide modal after a short delay
                             hideTicketModal();
-                            ticketQuestionTextarea.value = ''; // Clear form
-                            ticketTeamSelect.innerHTML = ''; 
+                             // Optional: Clear chat history after ticket creation if desired
+                             // chatHistory = [];
+                             // chatHistoryDiv.innerHTML = '';
                         }, 2000);
                     } else {
                         ticketSubmissionMessage.textContent = `Error: ${data.detail || data.error || 'Could not create ticket.'}`;
@@ -460,8 +731,344 @@
             });
 
 
+            // --- NEW Admin Functionality ---
+
+            async function fetchAndDisplayUsers() {
+                if (!currentUserEmail) {
+                    adminMessage.textContent = 'Error: Admin user not logged in.';
+                    adminMessage.style.color = 'red';
+                    userListContainer.innerHTML = ''; // Clear list
+                    return;
+                }
+
+                adminMessage.textContent = 'Loading users...';
+                adminMessage.style.color = 'inherit'; // Reset color
+                userListContainer.innerHTML = 'Loading users...'; // Show loading text
+
+                try {
+                    // Call GET /admin/users, passing admin_email as query parameter for authorization
+                    const response = await fetch(`/admin/users?admin_email=${encodeURIComponent(currentUserEmail)}`, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                        // Note: No body for GET request
+                    });
+                    const users = await response.json();
+
+                    if (response.ok) {
+                        adminMessage.textContent = ''; // Clear loading message
+                        allFetchedUsers = Array.isArray(users) ? users : []; // Store the fetched users, ensure it's an array
+                        renderUserList(allFetchedUsers);
+                    } else {
+                        // Handle unauthorized/forbidden errors specifically
+                        if (response.status === 401 || response.status === 403) {
+                             adminMessage.textContent = `Authorization Error: ${users.detail || 'You do not have permission to view this list.'}`;
+                             adminMessage.style.color = 'red';
+                             userListContainer.innerHTML = ''; // Clear list on auth error
+                         } else {
+                            adminMessage.textContent = `Error loading users: ${users.detail || users.error || 'Unknown error'}`;
+                            adminMessage.style.color = 'red';
+                            userListContainer.innerHTML = 'Failed to load users.';
+                         }
+                    }
+                } catch (error) {
+                    console.error('Fetch users error:', error);
+                    adminMessage.textContent = 'An error occurred while fetching the user list.';
+                    adminMessage.style.color = 'red';
+                    userListContainer.innerHTML = 'An error occurred.';
+                }
+            }
+
+            function renderUserList(users) {
+                if (!users || users.length === 0) {
+                    userListContainer.innerHTML = '<p>No users found (or you do not have permission to view them).</p>'; // Updated message
+                    return;
+                }
+
+                let tableHtml = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Hierarchy</th>
+                                <th>Departments</th>
+                                <th>Projects</th>
+                                <th>Roles (JSON)</th> <!-- Indicate JSON format -->
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                users.forEach(user => {
+                    // Convert array/dict fields to strings for display
+                    const departmentsStr = (user.departments || []).join(', ');
+                    const projectsStr = (user.projects_membership || []).join(', ');
+                     let rolesStr = '{}';
+                     try {
+                         // Display JSON string of roles
+                         rolesStr = JSON.stringify(user.contextual_roles || {});
+                         // Truncate long JSON for display in table
+                         if (rolesStr.length > 100) { // Increased truncation length
+                             rolesStr = rolesStr.substring(0, 97) + '...';
+                         }
+                     } catch (e) {
+                         rolesStr = 'Invalid JSON';
+                     }
+
+                    // Add data-email attributes to buttons for easy access in event listener
+                    // Ensure backticks surround the multi-line string for table row
+                    tableHtml += `
+                        <tr>
+                            <td>${escapeHTML(user.user_email)}</td> <!-- Escape email too -->
+                            <td>${user.user_hierarchy_level}</td>
+                            <td>${escapeHTML(departmentsStr)}</td>
+                            <td>${escapeHTML(projectsStr)}</td>
+                            <td>${escapeHTML(rolesStr)}</td>
+                            <td>
+                                <button class="editUserButton" data-email="${escapeAttribute(user.user_email)}">Edit</button>
+                                <button class="deleteUserButton" data-email="${escapeAttribute(user.user_email)}">Delete</button>
+                            </td>
+                        </tr>
+                    `; // Make sure this backtick is present
+                });
+
+                 // Ensure backticks surround the multi-line string for table closing
+                tableHtml += `
+                        </tbody>
+                    </table>
+                `; // Make sure this backtick is present
+
+
+                userListContainer.innerHTML = tableHtml;
+            }
+
+            // Helper function to escape HTML entities for display in table cells
+            function escapeHTML(str) {
+                return str.replace(/[&<>"']/g, function(match) {
+                    const escape = {
+                        '&': '&',
+                        '<': '<',
+                        '>': '>',
+                        '"': '"',
+                        "'": "'"
+                    };
+                    return escape[match];
+                });
+            }
+
+            // Helper function to escape attribute values (specifically double quotes)
+             function escapeAttribute(str) {
+                 return str.replace(/"/g, '"');
+             }
+
+
+            async function saveUser() {
+                if (!currentUserEmail) { // Ensure admin is logged in
+                    userFormMessage.textContent = 'Error: Admin user not logged in.';
+                    userFormMessage.style.color = 'red';
+                    return;
+                }
+
+                // Get email from hidden field for edit, or display field for add
+                const email = isEditMode ? userFormEmailHidden.value.trim() : userFormEmailDisplay.value.trim();
+                const hierarchy = parseInt(userFormHierarchy.value, 10);
+                // Split comma-separated strings into arrays, filter empty entries
+                const departments = userFormDepartments.value.trim().split(',').map(d => d.trim()).filter(d => d);
+                const projects = userFormProjects.value.trim().split(',').map(p => p.trim()).filter(p => p);
+                let roles = {};
+                try {
+                    const rolesString = userFormRoles.value.trim();
+                    if (rolesString) {
+                         roles = JSON.parse(rolesString);
+                         // Basic validation: ensure it's an object, not an array or null
+                         if (typeof roles !== 'object' || roles === null || Array.isArray(roles)) {
+                             throw new Error("Input is not a valid JSON object.");
+                         }
+                         // Optional: More detailed validation of roles object structure (ContextTag: [Role1, Role2])
+                         for (const context in roles) {
+                            if (!Array.isArray(roles[context])) {
+                                console.warn(`Validation Warning: Roles for context '${context}' is not an array.`);
+                                // Optionally filter out invalid entries or enforce strict structure
+                                // throw new Error(`Roles for context '${context}' must be a JSON array.`);
+                            }
+                            // Optional: Check if role tags are strings
+                            if (roles[context] && roles[context].some(role => typeof role !== 'string')) {
+                                 console.warn(`Validation Warning: All role tags in context '${context}' must be strings.`);
+                                // Optionally filter out invalid entries or enforce strict structure
+                                // throw new Error(`All role tags in context '${context}' must be strings.`);
+                            }
+                         }
+
+                    }
+                } catch (e) {
+                    userFormMessage.textContent = `Error parsing roles JSON: ${e.message || e}`;
+                    userFormMessage.style.color = 'red';
+                    console.error("Roles JSON parsing error:", e);
+                    return; // Stop execution if JSON is invalid
+                }
+
+
+                // Basic validation
+                if (!email) {
+                    userFormMessage.textContent = 'Email is required.';
+                    userFormMessage.style.color = 'red';
+                    return;
+                }
+                 if (!email.includes('@') || email.indexOf('@') === 0 || email.indexOf('@') === email.length - 1) { // Simple email format check
+                     userFormMessage.textContent = 'Please enter a valid email address.';
+                     userFormMessage.style.color = 'red';
+                     return;
+                 }
+                if (isNaN(hierarchy) || hierarchy < 0) {
+                     userFormMessage.textContent = 'Hierarchy Level must be a non-negative number.';
+                     userFormMessage.style.color = 'red';
+                     return;
+                }
+
+
+                const userData = {
+                    user_email: email,
+                    user_hierarchy_level: hierarchy,
+                    departments: departments,
+                    projects_membership: projects,
+                    contextual_roles: roles // Send as JS object, JSON.stringify is automatic
+                };
+
+                userFormMessage.textContent = 'Saving user...';
+                userFormMessage.style.color = 'inherit';
+
+                try {
+                    const url = isEditMode ? `/admin/users/${encodeURIComponent(email)}` : '/admin/users';
+                    const method = isEditMode ? 'PUT' : 'POST';
+
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ admin_email: currentUserEmail, user_profile: userData }) // Include admin email and user data
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        userFormMessage.textContent = `User ${email} saved successfully!`;
+                        userFormMessage.style.color = 'green';
+                        // Refresh user list and hide modal after a short delay
+                        setTimeout(() => {
+                            hideUserFormModal();
+                            fetchAndDisplayUsers(); // Refresh list after save
+                        }, 1500);
+                    } else {
+                        // Handle specific backend errors (e.g., user exists for POST)
+                        if (response.status === 409) { // Conflict - user already exists on POST
+                            userFormMessage.textContent = `Error: User with email ${email} already exists. Use Edit to modify.`;
+                            userFormMessage.style.color = 'red';
+                        } else if (response.status === 404) { // Not Found - user not exists on PUT
+                             userFormMessage.textContent = `Error: User with email ${email} not found for update.`;
+                            userFormMessage.style.color = 'red';
+                        }
+                        else { // Generic error
+                            userFormMessage.textContent = `Error saving user ${email}: ${result.detail || result.error || 'Unknown error'}`;
+                            userFormMessage.style.color = 'red';
+                        }
+                         console.error('Save user backend error:', result);
+                    }
+                } catch (error) {
+                    console.error('Save user fetch error:', error);
+                    userFormMessage.textContent = 'An error occurred while saving the user.';
+                    userFormMessage.style.color = 'red';
+                }
+            }
+
+            async function deleteUser(emailToDelete) {
+                 if (!currentUserEmail) { // Ensure admin is logged in
+                    adminMessage.textContent = 'Error: Admin user not logged in.';
+                    adminMessage.style.color = 'red';
+                    return;
+                }
+
+                // Prevent admin from deleting themselves
+                if (currentUserEmail.toLowerCase() === emailToDelete.toLowerCase()) {
+                    adminMessage.textContent = "Error: You cannot delete your own admin profile.";
+                    adminMessage.style.color = 'red';
+                    return;
+                }
+
+
+                if (confirm(`Are you sure you want to delete user ${emailToDelete}? This action is permanent.`)) {
+                    adminMessage.textContent = `Deleting user ${emailToDelete}...`;
+                    adminMessage.style.color = 'inherit';
+
+                    try {
+                        // Call DELETE /admin/users/{email}, include admin_email in body for auth
+                        const response = await fetch(`/admin/users/${encodeURIComponent(emailToDelete)}`, {
+                            method: 'DELETE',
+                             headers: { 'Content-Type': 'application/json' },
+                             // Body is needed for admin_email authorization check in backend
+                             body: JSON.stringify({ admin_email: currentUserEmail })
+                        });
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            adminMessage.textContent = `User ${emailToDelete} deleted successfully.`;
+                            adminMessage.style.color = 'green';
+                            fetchAndDisplayUsers(); // Refresh list after delete
+                        } else {
+                             if (response.status === 404) { // Not Found
+                                adminMessage.textContent = `Error: User with email ${emailToDelete} not found for deletion.`;
+                                adminMessage.style.color = 'red';
+                            } else { // Generic error
+                                adminMessage.textContent = `Error deleting user ${emailToDelete}: ${result.detail || result.error || 'Unknown error'}`;
+                                adminMessage.style.color = 'red';
+                            }
+                             console.error('Delete user backend error:', result);
+                        }
+                    } catch (error) {
+                        console.error('Delete user fetch error:', error);
+                        adminMessage.textContent = 'An error occurred while deleting the user.';
+                        adminMessage.style.color = 'red';
+                    }
+                }
+            }
+
+            // --- End NEW Admin Functionality ---
+
+
+            // NEW Admin Event Listeners
+            // Note: Admin Panel Button event listener is added dynamically in login success
+
+            showUsersButton.addEventListener('click', fetchAndDisplayUsers); // Refresh button
+            addNewUserButton.addEventListener('click', () => showUserFormModal(false)); // "Add New User" button
+
+            // Event delegation for Edit and Delete buttons on the user list container
+            userListContainer.addEventListener('click', (event) => {
+                const target = event.target;
+                const email = target.dataset.email; // Get email from data attribute
+
+                if (target.classList.contains('editUserButton') && email) {
+                    // Find the full user data from the stored list (allFetchedUsers)
+                    const userToEdit = allFetchedUsers.find(user => user.user_email === email);
+                    if (userToEdit) {
+                        showUserFormModal(true, userToEdit); // Open modal in edit mode with the found data
+                    } else {
+                         adminMessage.textContent = `Error: Could not find user data for ${email} to edit. Please refresh list.`;
+                         adminMessage.style.color = 'red';
+                         console.error("Could not find user data in allFetchedUsers for email:", email);
+                    }
+
+                } else if (target.classList.contains('deleteUserButton') && email) {
+                    deleteUser(email); // Trigger delete function
+                }
+            });
+
+            // User Form Modal Button Listeners
+            saveUserButton.addEventListener('click', saveUser);
+            cancelUserButton.addEventListener('click', hideUserFormModal);
+
+            // Back to Chat button listener (in Admin Section)
+            hideAdminButton.addEventListener('click', hideAdminPanel);
+
+
             // Initial UI State
-            showLogin();
+            showLogin(); // Start by showing the login section
         });
     </script>
 </body>

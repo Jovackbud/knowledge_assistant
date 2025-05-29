@@ -21,6 +21,9 @@ DEFAULT_PROJECT_TAG = "GENERAL"
 DEFAULT_HIERARCHY_LEVEL = 0  # e.g., Staff/Member
 DEFAULT_ROLE_TAG = "MEMBER" # Default role if no specific role folder found
 
+# --- Admin Configuration ---
+ADMIN_REQUIRED_HIERARCHY_LEVEL = 3 # Define the minimum hierarchy level required for admin access
+
 # Known department tags for path parsing. Case-insensitive matching for path parts.
 KNOWN_DEPARTMENT_TAGS = [
     "HR", "IT", "FINANCE",
@@ -106,6 +109,29 @@ class FeedbackRequest(BaseModel):
     question: str
     answer: str
     feedback_type: str # e.g., "👍" or "👎"
+
+# --- Admin API Schemas and Models ---
+
+class UserProfileData(BaseModel): # Schema for user profile data itself
+    user_email: str
+    user_hierarchy_level: int
+    departments: List[str] = [] # Add default empty list
+    projects_membership: List[str] = [] # Add default empty list
+    contextual_roles: Dict[str, List[str]] = {} # Add default empty dict
+
+class AdminUserCreateRequest(BaseModel):
+    admin_email: str # Email of the admin making the request
+    user_profile: UserProfileData # The profile data for the new user
+
+class AdminUserUpdateRequest(BaseModel):
+    admin_email: str # Email of the admin making the request
+    user_profile: UserProfileData # The updated profile data for the user
+
+class AdminUserDeleteRequest(BaseModel):
+    admin_email: str # Email of the admin making the request
+    # Target user email will be in the path parameter
+
+# --- End Admin API Schemas and Models ---
 
 # --- User Profile Defaults ---
 # (These could be expanded and moved to a more specific user management config if needed)
