@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Optional, List, Any
 from config import (
     TICKET_DB_PATH, FEEDBACK_DB_PATH, AUTH_DB_PATH,
-    DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL, DEFAULT_DEPARTMENT_TAG
+    DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL, DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG
 )
 
 logger = logging.getLogger(__name__)
@@ -133,9 +133,14 @@ def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool
         projects_membership_list = profile_data.get("projects_membership", [])
         contextual_roles_dict = profile_data.get("contextual_roles", {})
 
+        if not isinstance(departments_list, list): departments_list = []
+        if not isinstance(projects_membership_list, list): projects_membership_list = []
+        if not isinstance(contextual_roles_dict, dict): contextual_roles_dict = {}
+
         departments_json = json.dumps(departments_list)
         projects_membership_json = json.dumps(projects_membership_list)
         contextual_roles_json = json.dumps(contextual_roles_dict)
+        
 
         with sqlite3.connect(AUTH_DB_PATH) as conn:
             cursor = conn.cursor()
@@ -201,6 +206,83 @@ def get_user_profile(email: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Profile retrieval failed for {email}: {e}", exc_info=True)
         return None
 
+# --- NEW FUNCTIONS FOR ADMIN ---
+
+def get_all_user_profiles() -> List[Dict[str, Any]]:
+    """
+    Fetches all user profiles from the database.
+    """
+    profiles = []
+    try:
+        with sqlite3.connect(AUTH_DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM UserAccessProfile")
+            rows = cursor.fetchall()
+
+            for row in rows:
+                profile = dict(row)
+                # Safely parse JSON fields, similar to get_user_profile
+                for field_name, default_value in [
+                    ("departments", []),
+                    ("projects_membership", []),
+                    ("contextual_roles", {})
+                ]:
+                    try:
+                        loaded_value = json.loads(profile[field_name])
+                        if field_name == "contextual_roles" and not isinstance(loaded_value, dict):
+                            logger.warning(
+                                f"Parsed '{field_name}' for {profile.get('user_email', 'N/A')} is not a dict, defaulting. Value: {loaded_value}")
+                            profile[field_name] = default_value
+                        elif field_name != "contextual_roles" and not isinstance(loaded_value, list):
+                             logger.warning(
+                                f"Parsed '{field_name}' for {profile.get('user_email', 'N/A')} is not a list, defaulting. Value: {loaded_value}")
+                             profile[field_name] = default_value
+                        else:
+                            profile[field_name] = loaded_value
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(
+                            f"Could not parse '{field_name}' for {profile.get('user_email', 'N/A')}, defaulting. Raw: {profile.get(field_name)}")
+                        profile[field_name] = default_value
+
+                 # Ensure hierarchy is int
+                if "user_hierarchy_level" not in profile or not isinstance(profile["user_hierarchy_level"], int):
+                    logger.warning(
+                        f"'user_hierarchy_level' for {profile.get('user_email', 'N/A')} invalid/missing, defaulting. Val: {profile.get('user_hierarchy_level')}")
+                    profile["user_hierarchy_level"] = DEFAULT_HIERARCHY_LEVEL
+
+                profiles.append(profile)
+
+        logger.info(f"Fetched {len(profiles)} user profiles.")
+        return profiles
+    except Exception as e:
+        logger.error(f"Error fetching all user profiles: {e}", exc_info=True)
+        return []
+
+def delete_user_profile(email: str) -> bool:
+    """
+    Deletes a user profile from the database by email.
+    """
+    if not email or not isinstance(email, str) or "@" not in email:
+        logger.warning(f"Attempted to delete profile with invalid email: '{email}'.")
+        return False
+
+    try:
+        with sqlite3.connect(AUTH_DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM UserAccessProfile WHERE user_email = ?", (email,))
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"User profile deleted for email: {email}.")
+                return True
+            else:
+                logger.warning(f"No user profile found to delete for email: {email}.")
+                return False
+    except Exception as e:
+        logger.error(f"Error deleting user profile for {email}: {e}", exc_info=True)
+        return False
+
+# --- END NEW FUNCTIONS ---
 
 def _create_sample_users_if_not_exist():
     from config import KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS  # For sample data
@@ -242,6 +324,18 @@ def _create_sample_users_if_not_exist():
             "contextual_roles": {}
         }
     }
+
+        # Add an admin user for testing the new feature
+    admin_email = "admin@example.com"
+    if not get_user_profile(admin_email): # Check if admin user already exists
+         sample_users[admin_email] = {
+             "user_hierarchy_level": 3, # Highest level for admin (adjust based on your config later)
+             "departments": [DEFAULT_DEPARTMENT_TAG],
+             "projects_membership": [DEFAULT_PROJECT_TAG],
+             "contextual_roles": {"GLOBAL": ["ADMIN_SUPER"]} # Example of a global admin role
+         }
+         logger.info(f"Adding sample admin user: {admin_email}")
+
     for email, data in sample_users.items():
         if not get_user_profile(email):
             add_or_update_user_profile(email, data)
