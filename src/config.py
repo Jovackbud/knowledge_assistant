@@ -5,6 +5,8 @@ os.environ["KERAS_3"] = "0"
 from pathlib import Path
 from dotenv import load_dotenv
 
+from typing import List, Dict
+
 load_dotenv()
 
 # --- Document Configuration ---
