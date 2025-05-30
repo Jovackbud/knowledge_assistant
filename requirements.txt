@@ -1,5 +1,4 @@
 # Core framework
-streamlit==1.45.1                          # Latest Streamlit release for interactive apps :contentReference[oaicite:0]{index=0}
 
 # Deep learning and legacy-Keras shim
 
@@ -7,11 +6,14 @@ streamlit==1.45.1                          # Latest Streamlit release for intera
 
 # LangChain integrations
 langchain-core==0.3.60                     # Core LangChain library :contentReference[oaicite:5]{index=5}
+fastapi
+uvicorn[standard]
 
 # Vector database client
 pymilvus~=2.5.8
 
 # RPC & serialization dependencies
+requests~=2.31.0
 
 python-dotenv~=1.1.0
 langchain-community~=0.3.24

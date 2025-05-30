@@ -88,12 +88,12 @@ def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
         # Check for Department
         if metadata["department_tag"] == DEFAULT_DEPARTMENT_TAG and part_lower in known_dept_tags_lower:
             original_dept_tag_index = known_dept_tags_lower.index(part_lower)
-            metadata["department_tag"] = KNOWN_DEPARTMENT_TAGS[original_dept_tag_index]
+            metadata["department_tag"] = KNOWN_DEPARTMENT_TAGS[original_dept_tag_index].upper()
             continue  # Part consumed as department
 
         # Check for Role Folder
         if metadata["role_tag_required"] == DEFAULT_ROLE_TAG and part_lower in role_folder_tags_lower:
-            metadata["role_tag_required"] = role_folder_tags_lower[part_lower]
+            metadata["role_tag_required"] = role_folder_tags_lower[part_lower].upper()
             continue  # Part consumed as role
 
         # Check for Hierarchy Level
@@ -122,11 +122,11 @@ def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
             # This is highly dependent on folder structure discipline.
             # If `DOCS_FOLDER/PROJECT_X/file.pdf`, PROJECT_X is candidate.
             # If `DOCS_FOLDER/HR/PROJECT_Y/file.pdf`, PROJECT_Y is candidate after HR is parsed.
-            metadata["project_tag"] = project_candidates[0]  # Simplistic: take first candidate
+            metadata["project_tag"] = project_candidates[0].upper()  # Simplistic: take first candidate
 
     # Ensure department is not also the project if structure is ambiguous
-    if metadata["department_tag"] != DEFAULT_DEPARTMENT_TAG and metadata["department_tag"] == metadata["project_tag"]:
-        metadata["project_tag"] = DEFAULT_PROJECT_TAG  # Avoid department being same as project
+    if metadata["department_tag"] != DEFAULT_DEPARTMENT_TAG.upper() and metadata["department_tag"] == metadata["project_tag"]:
+        metadata["project_tag"] = DEFAULT_PROJECT_TAG.upper()  # Avoid department being same as project
 
     # logger.debug(f"Extracted metadata for '{relative_path}': {metadata} from parts: {parts}")
     return metadata

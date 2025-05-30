@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import Optional
-from database_utils import save_ticket
+from src.database_utils import save_ticket
 from config import TICKET_KEYWORD_MAP, TICKET_TEAMS
 
 logger = logging.getLogger(__name__)
