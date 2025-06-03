@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Optional, Any
-from src.database_utils import get_user_profile, add_or_update_user_profile
+from src.database_utils import get_user_profile, add_or_update_user_profile, delete_user_profile
 from config import DEFAULT_HIERARCHY_LEVEL
 
 logger = logging.getLogger(__name__)
@@ -170,3 +170,17 @@ def update_user_permissions_by_admin(target_email: str, new_permissions: Dict[st
     except Exception as e:
         logger.error(f"Exception during profile update for '{target_email}': {e}", exc_info=True)
         return {"error": f"An unexpected error occurred: {str(e)}"}
+    
+
+def remove_user_by_admin(target_email: str) -> Dict[str, Any]:
+    logger.info(f"Admin attempting to remove user '{target_email}'.")
+    if not target_email or not isinstance(target_email, str) or "@" not in target_email:
+        logger.error(f"Invalid target_email provided for user removal: '{target_email}'")
+        return {"error": "Invalid target email provided for removal."}
+
+    if delete_user_profile(target_email): # Assuming delete_user_profile returns True on success
+        return {"message": f"User '{target_email}' removed successfully."}
+    else:
+        # This could mean user not found, or a DB error
+        # Check logs from delete_user_profile for specifics
+        return {"error": f"Failed to remove user '{target_email}'. User might not exist or database error occurred."}

@@ -240,9 +240,34 @@ def _create_sample_users_if_not_exist():
             "departments": [],
             "projects_membership": [],
             "contextual_roles": {}
+        },
+         "admin.user@example.com": {  # New admin user
+            "user_hierarchy_level": 3,
+            "departments": [KNOWN_DEPARTMENT_TAGS[-1]], # Or specific admin department
+            "projects_membership": ["PROJECT_BETA"],
+            "contextual_roles": {}
         }
     }
     for email, data in sample_users.items():
         if not get_user_profile(email):
             add_or_update_user_profile(email, data)
             logger.info(f"Created sample user: {email}")  # Data not logged here to avoid clutter
+
+
+def delete_user_profile(email: str) -> bool:
+    try:
+        with sqlite3.connect(AUTH_DB_PATH) as conn:
+            cursor = conn.cursor()
+            # The ON DELETE CASCADE for foreign keys in tickets and feedback tables
+            # should handle associated data deletion automatically.
+            cursor.execute("DELETE FROM UserAccessProfile WHERE user_email = ?", (email,))
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"User profile for {email} deleted successfully.")
+                return True
+            else:
+                logger.warning(f"Attempted to delete profile for {email}, but user not found.")
+                return False # Or treat as success if idempotent deletion is desired
+    except Exception as e:
+        logger.error(f"Profile deletion failed for {email}: {e}", exc_info=True)
+        return False

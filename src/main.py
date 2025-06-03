@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from typing import Dict, Any
 from fastapi.responses import FileResponse
-from src.auth_service import fetch_user_access_profile, update_user_permissions_by_admin
+from src.auth_service import fetch_user_access_profile, update_user_permissions_by_admin, remove_user_by_admin
 from src.config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL # Added ADMIN_HIERARCHY_LEVEL
 from src.rag_processor import RAGService
 from src.ticket_system import suggest_ticket_team, create_ticket
@@ -202,3 +202,70 @@ async def admin_update_user_permissions(
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+    
+
+
+class UserRemovalRequest(BaseModel): # Optional: or just take email from path
+    target_email: str
+
+@app.post("/admin/remove_user") # Or use @app.delete("/admin/user/{target_email_in_path}")
+async def admin_remove_user(
+    payload: UserRemovalRequest, # If using POST with payload
+    # target_email_in_path: str, # If using DELETE with path parameter
+    x_user_email: str = Header(None, alias="X-User-Email")
+):
+    logger.info(f"Received request to remove user '{payload.target_email}' by admin '{x_user_email}'.")
+    # target_email_to_remove = payload.target_email # if using POST payload
+
+    if not x_user_email:
+        raise HTTPException(status_code=400, detail="X-User-Email header is required.")
+
+    if not await is_admin(x_user_email):
+        raise HTTPException(status_code=403, detail="Forbidden: Requesting user is not an admin.")
+
+    try:
+        # removal_result = remove_user_by_admin(target_email_to_remove) # if using POST payload
+        removal_result = remove_user_by_admin(payload.target_email) # if using POST payload
+        
+        if "error" in removal_result:
+             # Determine appropriate status code, e.g. 404 if user not found, 500 otherwise
+            status_code = 404 if "not exist" in removal_result["error"] or "not found" in removal_result["error"] else 500
+            raise HTTPException(status_code=status_code, detail=removal_result["error"])
+        
+        return removal_result
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.error(f"Error during admin removal of user '{payload.target_email}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+    
+@app.get("/admin/view_user_permissions/{target_email}")
+async def admin_view_user_permissions(
+    target_email: str,
+    x_user_email: str = Header(None, alias="X-User-Email")
+):
+    logger.info(f"Admin '{x_user_email}' attempting to view permissions for user '{target_email}'.")
+
+    if not x_user_email:
+        raise HTTPException(status_code=400, detail="X-User-Email header is required.")
+
+    if not await is_admin(x_user_email):
+        logger.warning(f"Unauthorized attempt to view permissions by non-admin user '{x_user_email}' for target '{target_email}'.")
+        raise HTTPException(status_code=403, detail="Forbidden: Requesting user is not an admin.")
+
+    if not target_email or "@" not in target_email:
+        raise HTTPException(status_code=400, detail="Invalid target_email provided.")
+
+    try:
+        # fetch_user_access_profile already handles logging if user is not found
+        user_profile = fetch_user_access_profile(target_email)
+        if not user_profile:
+            raise HTTPException(status_code=404, detail=f"User profile for '{target_email}' not found.")
+        
+        logger.info(f"Successfully fetched profile for '{target_email}' for admin viewing by '{x_user_email}'.")
+        return user_profile # Returns the full profile
+    except HTTPException as http_exc:
+        raise http_exc # Re-raise known HTTP exceptions
+    except Exception as e:
+        logger.error(f"Error during admin viewing of permissions for '{target_email}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal error occurred while fetching user permissions: {str(e)}")

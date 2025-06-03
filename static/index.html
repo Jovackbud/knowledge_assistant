@@ -3,24 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Knowledge Assistant - Flask</title>
+    <title>Company Knowledge Assistant</title>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
         .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         .hidden { display: none; }
-        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section, #admin-permissions-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section, 
+        #admin-permissions-section { 
+            margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; 
+        }
         #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
         .chat-message { margin-bottom: 10px; }
         .user-message { text-align: right; color: #007bff; }
         .assistant-message { text-align: left; color: #28a745; }
         label { display: block; margin-bottom: 5px; }
-        input[type='email'], input[type='text'], textarea, select { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+        input[type='email'], input[type='text'], input[type='number'], textarea, select { 
+            width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; 
+            border: 1px solid #ccc; border-radius: 4px; 
+        }
+        button { 
+            padding: 10px 15px; background-color: #007bff; color: white; 
+            border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; 
+        }
         button:hover { background-color: #0056b3; }
         #feedback-buttons button { background-color: #6c757d; }
         #feedback-buttons button:hover { background-color: #545b62; }
-        #ticket-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000; border-radius: 8px; }
+        #ticket-modal { 
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background-color: white; padding: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.2); 
+            z-index: 1000; border-radius: 8px; 
+        }
         #ticket-form-container { width: 400px; }
+        pre { 
+            white-space: pre-wrap; word-wrap: break-word; background-color: #efefef; 
+            padding: 10px; border-radius: 3px; 
+        }
+        /* Style for the Admin Panel Toggle Button Area */
+        #admin-controls-area { margin-top: 15px; padding-top:10px; border-top: 1px solid #eee; }
+        #toggleAdminPanelButton { background-color: #ffc107; color: #212529; }
+        #toggleAdminPanelButton:hover { background-color: #e0a800; }
     </style>
 </head>
 <body>
@@ -45,15 +66,37 @@
             <p><strong>Projects:</strong> <span id="profile-projects"></span></p>
             <p><strong>Roles:</strong> <span id="profile-roles"></span></p>
             <button id="logoutButton">Logout</button>
+
+            <!-- Area for Admin Toggle Button - only visible to admins -->
+            <div id="admin-controls-area" class="hidden">
+                <button id="toggleAdminPanelButton">Show Admin Panel</button>
+            </div>
         </div>
 
-        <!-- Admin Permissions Section (hidden by default) -->
+        <!-- Admin Permissions Section (hidden by default AND toggled) -->
         <div id="admin-permissions-section" class="hidden">
-            <h2>Admin Panel - User Permissions</h2>
+            <h2>Admin Panel</h2>
+            <hr style="margin-bottom: 20px;">
+            
+            <h3>View User Permissions</h3>
+            <div>
+                <label for="view-target-user-email">User Email to View:</label>
+                <input type="email" id="view-target-user-email" required>
+            </div>
+            <button type="button" id="viewPermissionsButton">View Permissions</button>
+            <div id="admin-view-permissions-message" style="margin-top: 10px;"></div>
+            <div id="user-permissions-display" style="margin-top: 10px; padding: 10px; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 4px;" class="hidden">
+                <h4>Permissions for <span id="display-user-email"></span>:</h4>
+                <pre id="display-user-permissions-json"></pre>
+            </div>
+            <hr style="margin-top: 20px; margin-bottom: 20px;">
+
+            <h3>Manage User Permissions</h3>
             <form id="admin-permissions-form">
                 <div>
                     <label for="target-user-email">Target User Email:</label>
                     <input type="email" id="target-user-email" required>
+                    <small style="display: block; margin-bottom: 10px;">(Creates new user if email doesn't exist, or updates existing user.)</small>
                 </div>
                 <div>
                     <label for="target-hierarchy-level">New Hierarchy Level:</label>
@@ -71,9 +114,18 @@
                     <label for="target-contextual-roles">New Contextual Roles (JSON string):</label>
                     <textarea id="target-contextual-roles" rows="3" placeholder='e.g., {"PROJECT_X": ["LEAD"], "DEPARTMENT_Y": ["REVIEWER"]}'></textarea>
                 </div>
-                <button type="submit" id="updatePermissionsButton">Update Permissions</button>
+                <button type="submit" id="updatePermissionsButton">Manage User Permissions</button>
             </form>
             <div id="admin-permissions-message" style="margin-top: 10px;"></div>
+            <hr style="margin-top: 20px; margin-bottom: 20px;">
+
+            <h3>Remove User</h3>
+            <div>
+                <label for="remove-target-user-email">User Email to Remove:</label>
+                <input type="email" id="remove-target-user-email" required>
+            </div>
+            <button type="button" id="removeUserButton" style="background-color: #dc3545; color: white;">Remove User</button>
+            <div id="admin-remove-user-message" style="margin-top: 10px;"></div>
         </div>
 
         <!-- Chat Section (hidden by default) -->
@@ -106,13 +158,9 @@
                 <h2>New Support Ticket</h2>
                 <label for="ticket-question">Issue/Question:</label>
                 <textarea id="ticket-question" rows="3"></textarea>
-                
                 <label for="ticket-team">Team:</label>
-                <select id="ticket-team">
-                    <!-- Options will be populated dynamically -->
-                </select>
+                <select id="ticket-team"></select>
                 <p id="team-suggestion"></p>
-
                 <button id="submitTicketButton">Submit Ticket</button>
                 <button id="cancelTicketButton">Cancel</button>
                 <p id="ticket-submission-message" style="color: green;"></p>
@@ -122,15 +170,14 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Element Selectors
+            // --- Element Selectors ---
             const loginSection = document.getElementById('login-section');
             const userProfileSection = document.getElementById('user-profile-section');
             const chatSection = document.getElementById('chat-section');
             const feedbackSection = document.getElementById('feedback-section');
             const ticketCreationTrigger = document.getElementById('ticket-creation-trigger');
             const ticketModal = document.getElementById('ticket-modal');
-            const adminPermissionsSection = document.getElementById('admin-permissions-section'); // Added
-
+            
             const emailInput = document.getElementById('email');
             const loginButton = document.getElementById('loginButton');
             const loginError = document.getElementById('login-error');
@@ -160,6 +207,17 @@
             const ticketSubmissionMessage = document.getElementById('ticket-submission-message');
             
             // Admin Panel Elements
+            const adminControlsArea = document.getElementById('admin-controls-area');
+            const toggleAdminPanelButton = document.getElementById('toggleAdminPanelButton');
+            const adminPermissionsSection = document.getElementById('admin-permissions-section');
+            // View User Permissions
+            const viewTargetUserEmailInput = document.getElementById('view-target-user-email');
+            const viewPermissionsButton = document.getElementById('viewPermissionsButton');
+            const adminViewPermissionsMessage = document.getElementById('admin-view-permissions-message');
+            const userPermissionsDisplayDiv = document.getElementById('user-permissions-display');
+            const displayUserEmailSpan = document.getElementById('display-user-email');
+            const displayUserPermissionsJsonPre = document.getElementById('display-user-permissions-json');
+            // Manage User Permissions
             const adminPermissionsForm = document.getElementById('admin-permissions-form');
             const targetUserEmailInput = document.getElementById('target-user-email');
             const targetHierarchyLevelInput = document.getElementById('target-hierarchy-level');
@@ -167,16 +225,19 @@
             const targetProjectsInput = document.getElementById('target-projects');
             const targetContextualRolesInput = document.getElementById('target-contextual-roles');
             const adminPermissionsMessage = document.getElementById('admin-permissions-message');
+            // Remove User
+            const removeTargetUserEmailInput = document.getElementById('remove-target-user-email');
+            const removeUserButton = document.getElementById('removeUserButton');
+            const adminRemoveUserMessage = document.getElementById('admin-remove-user-message');
 
-
-            // State Variables
+            // --- State Variables ---
             let currentUserEmail = null;
             let currentUserProfile = null;
             let currentQuestion = null;
             let currentAnswer = null;
-            let chatHistory = []; // To store {role: 'user'/'assistant', content: 'message'}
+            let chatHistory = []; 
 
-            // Visibility Functions
+            // --- Visibility Functions ---
             function showLogin() {
                 loginSection.classList.remove('hidden');
                 userProfileSection.classList.add('hidden');
@@ -184,18 +245,18 @@
                 feedbackSection.classList.add('hidden');
                 ticketCreationTrigger.classList.add('hidden');
                 ticketModal.classList.add('hidden');
-                adminPermissionsSection.classList.add('hidden'); // Hide admin panel on initial login screen
+                // Admin specific UI
+                adminControlsArea.classList.add('hidden'); 
+                adminPermissionsSection.classList.add('hidden'); 
+                userPermissionsDisplayDiv.classList.add('hidden'); 
             }
 
-            function showProfile() {
-                userProfileSection.classList.remove('hidden');
-            }
-
-            function showChat() {
+            function showChat() { // Called after successful login
                 loginSection.classList.add('hidden');
-                userProfileSection.classList.remove('hidden'); // Keep profile visible
+                userProfileSection.classList.remove('hidden'); 
                 chatSection.classList.remove('hidden');
                 ticketCreationTrigger.classList.remove('hidden');
+                // Admin panel visibility is handled in login logic
             }
             
             function hideFeedback() {
@@ -204,9 +265,9 @@
             }
 
             function showFeedback() {
-                feedbackButtonsDiv.classList.remove('hidden'); // Ensure buttons are visible
+                feedbackButtonsDiv.classList.remove('hidden'); 
                 feedbackSection.classList.remove('hidden');
-                feedbackMessage.textContent = ''; // Clear previous message
+                feedbackMessage.textContent = ''; 
             }
             
             function hideTicketModal() {
@@ -218,117 +279,106 @@
 
             // --- Event Listeners ---
 
-            // Login
             loginButton.addEventListener('click', async () => {
                 const email = emailInput.value.trim();
                 loginError.textContent = '';
-                if (!email) {
-                    loginError.textContent = 'Please enter your email.';
-                    return;
-                }
-
+                if (!email) { loginError.textContent = 'Please enter your email.'; return; }
                 try {
-                    // 1. Login Functionality: URL changed to /auth/login
                     const response = await fetch('/auth/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: email }) // FastAPI expects {"email": "..."}
+                        body: JSON.stringify({ email: email })
                     });
                     const data = await response.json();
-
                     if (response.ok) {
-                        currentUserEmail = data.user_email; // Store email from response
-                        currentUserProfile = data; // Store full profile
-                        
+                        currentUserEmail = data.user_email; 
+                        currentUserProfile = data; 
                         profileEmail.textContent = currentUserProfile.user_email || 'N/A';
-                        profileHierarchy.textContent = currentUserProfile.user_hierarchy_level  || 'N/A';
-                        profileDepartments.textContent = (currentUserProfile.departments || []).join(', ') || 'N/A';
-                        profileProjects.textContent = (currentUserProfile.projects_membership || []).join(', ') || 'N/A';
-                        profileRoles.textContent = JSON.stringify(currentUserProfile.contextual_roles) || 'N/A';
+                        profileHierarchy.textContent = currentUserProfile.user_hierarchy_level !== undefined ? currentUserProfile.user_hierarchy_level : 'N/A';
+                        profileDepartments.textContent = (currentUserProfile.departments && currentUserProfile.departments.length > 0) ? currentUserProfile.departments.join(', ') : 'None';
+                        profileProjects.textContent = (currentUserProfile.projects_membership && currentUserProfile.projects_membership.length > 0) ? currentUserProfile.projects_membership.join(', ') : 'None';
+                        profileRoles.textContent = (currentUserProfile.contextual_roles && Object.keys(currentUserProfile.contextual_roles).length > 0) ? JSON.stringify(currentUserProfile.contextual_roles) : 'None';
                         
-                        showChat();
-                        emailInput.value = ''; // Clear login input
+                        showChat(); // Shows user profile, chat, etc.
+                        emailInput.value = ''; 
 
-                        // Show admin panel if user is admin (level 3)
-                        if (currentUserProfile.user_hierarchy_level === 3) {
-                            adminPermissionsSection.classList.remove('hidden');
+                        // Handle Admin UI elements
+                        if (currentUserProfile.user_hierarchy_level === 3) { // Admin Level Check
+                            adminControlsArea.classList.remove('hidden'); // Show the "Admin Panel" button's container
+                            toggleAdminPanelButton.textContent = 'Show Admin Panel'; // Set initial text
                         } else {
-                            adminPermissionsSection.classList.add('hidden');
+                            adminControlsArea.classList.add('hidden'); 
+                            adminPermissionsSection.classList.add('hidden'); 
                         }
                     } else {
-                        loginError.textContent = data.detail || data.error || 'Login failed. Please check your email.'; // FastAPI often uses "detail" for errors
-                        currentUserEmail = null;
-                        currentUserProfile = null;
+                        loginError.textContent = data.detail || data.error || 'Login failed. Please check your email.';
+                        currentUserEmail = null; currentUserProfile = null;
                     }
                 } catch (error) {
                     console.error('Login error:', error);
                     loginError.textContent = 'An error occurred during login.';
-                    currentUserEmail = null;
-                    currentUserProfile = null;
+                    currentUserEmail = null; currentUserProfile = null;
                 }
             });
 
-            // Logout
-            // 2. Logout Functionality: Removed fetch call, client-side only
             logoutButton.addEventListener('click', () => {
-                currentUserEmail = null;
-                currentUserProfile = null;
-                currentQuestion = null;
-                currentAnswer = null;
-                chatHistory = [];
-                
+                currentUserEmail = null; currentUserProfile = null; currentQuestion = null; currentAnswer = null; chatHistory = [];
                 chatHistoryDiv.innerHTML = '';
-                profileEmail.textContent = '';
-                profileHierarchy.textContent = '';
-                profileDepartments.textContent = '';
-                profileProjects.textContent = '';
-                profileRoles.textContent = '';
-                
+                profileEmail.textContent = ''; profileHierarchy.textContent = ''; profileDepartments.textContent = ''; profileProjects.textContent = ''; profileRoles.textContent = '';
                 hideFeedback();
-                adminPermissionsSection.classList.add('hidden'); // Hide admin panel on logout
-                adminPermissionsMessage.textContent = ''; // Clear admin messages
-                adminPermissionsForm.reset(); // Reset admin form
-                showLogin();
-                // No alert needed for client-side only operation
+                
+                // Clear and hide all admin related things
+                adminPermissionsMessage.textContent = ''; 
+                adminRemoveUserMessage.textContent = ''; 
+                adminViewPermissionsMessage.textContent = '';
+                adminPermissionsForm.reset();
+                removeTargetUserEmailInput.value = ''; 
+                viewTargetUserEmailInput.value = ''; 
+                
+                showLogin(); // This also hides adminControlsArea, adminPermissionsSection, and userPermissionsDisplayDiv
             });
 
-            // Append message to chat history display
+            toggleAdminPanelButton.addEventListener('click', () => {
+                const isAdminPanelVisible = !adminPermissionsSection.classList.contains('hidden');
+                if (isAdminPanelVisible) {
+                    adminPermissionsSection.classList.add('hidden');
+                    toggleAdminPanelButton.textContent = 'Show Admin Panel';
+                } else {
+                    adminPermissionsSection.classList.remove('hidden');
+                    toggleAdminPanelButton.textContent = 'Hide Admin Panel';
+                }
+            });
+
             function appendMessage(role, text) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('chat-message', role === 'user' ? 'user-message' : 'assistant-message');
                 messageDiv.textContent = text;
                 chatHistoryDiv.appendChild(messageDiv);
-                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight; // Scroll to bottom
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
             }
 
-            // Send Chat Message
             sendChatButton.addEventListener('click', async () => {
                 const prompt = chatInput.value.trim();
-                if (!prompt || !currentUserEmail) return; // Ensure user is logged in
-
+                if (!prompt || !currentUserEmail) return;
                 appendMessage('user', prompt);
                 chatHistory.push({ role: 'user', content: prompt });
-                currentQuestion = prompt;
-                chatInput.value = '';
-                hideFeedback(); // Hide previous feedback section
-
+                currentQuestion = prompt; chatInput.value = '';
+                hideFeedback(); 
                 try {
-                    // 3. Chat Functionality: URL changed to /rag/chat, payload includes email
                     const response = await fetch('/rag/chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email: currentUserEmail, prompt: prompt }) 
                     });
                     const data = await response.json();
-
                     if (response.ok) {
-                        currentAnswer = data.response; // FastAPI returns {"response": "..."}
+                        currentAnswer = data.response; 
                         appendMessage('assistant', currentAnswer);
                         chatHistory.push({ role: 'assistant', content: currentAnswer });
                         showFeedback();
                     } else {
                         appendMessage('assistant', `Error: ${data.detail || data.error || 'Could not get response.'}`);
-                        currentAnswer = null; // No valid answer
+                        currentAnswer = null;
                     }
                 } catch (error) {
                     console.error('Chat error:', error);
@@ -337,34 +387,21 @@
                 }
             });
             
-            chatInput.addEventListener('keypress', (event) => {
-                if (event.key === 'Enter') {
-                    sendChatButton.click();
-                }
-            });
+            chatInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { sendChatButton.click(); } });
 
-            // Feedback
             async function handleFeedback(feedbackType) {
-                if (!currentQuestion || !currentAnswer || !currentUserEmail) return; // Ensure user is logged in
-
+                if (!currentQuestion || !currentAnswer || !currentUserEmail) return;
                 feedbackMessage.textContent = '';
                 try {
-                    // 4. Feedback Functionality: URL changed to /feedback/record, payload includes email
                     const response = await fetch('/feedback/record', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            email: currentUserEmail, // Add email to payload
-                            question: currentQuestion,
-                            answer: currentAnswer,
-                            feedback_type: feedbackType
-                        })
+                        body: JSON.stringify({ email: currentUserEmail, question: currentQuestion, answer: currentAnswer, feedback_type: feedbackType })
                     });
                     const data = await response.json();
-
                     if (response.ok) {
                         feedbackMessage.textContent = 'Feedback received. Thank you!';
-                        feedbackButtonsDiv.classList.add('hidden'); // Hide buttons after feedback
+                        feedbackButtonsDiv.classList.add('hidden');
                     } else {
                         feedbackMessage.textContent = `Error: ${data.detail || data.error || 'Could not submit feedback.'}`;
                     }
@@ -377,63 +414,44 @@
             helpfulButton.addEventListener('click', () => handleFeedback('👍'));
             notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
-            // Ticket Modal
             openTicketModalButton.addEventListener('click', () => {
                 ticketModal.classList.remove('hidden');
-                ticketQuestionTextarea.value = currentQuestion || ''; // Pre-fill with last question if available
-                ticketSubmissionMessage.textContent = '';
-                teamSuggestionP.textContent = '';
-                // Trigger team suggestion based on pre-filled question
+                ticketQuestionTextarea.value = currentQuestion || ''; 
+                ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
                 if (ticketQuestionTextarea.value) {
-                    ticketQuestionTextarea.dispatchEvent(new Event('input'));
+                    ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                } else {
+                     ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>';
                 }
             });
 
-            cancelTicketButton.addEventListener('click', () => {
-                hideTicketModal();
-            });
+            cancelTicketButton.addEventListener('click', () => { hideTicketModal(); });
 
-            // Team Suggestion for Ticket
             let suggestTeamTimeout;
             ticketQuestionTextarea.addEventListener('input', () => {
                 clearTimeout(suggestTeamTimeout);
                 const questionText = ticketQuestionTextarea.value.trim();
                 teamSuggestionP.textContent = '';
-                ticketTeamSelect.innerHTML = '<option value="">Loading teams...</option>'; // Clear old options
-
-                if (!questionText) {
-                    ticketTeamSelect.innerHTML = '<option value="">Enter question to see suggestions</option>';
-                    return;
-                }
-
+                ticketTeamSelect.innerHTML = '<option value="">Loading teams...</option>';
+                if (!questionText) { ticketTeamSelect.innerHTML = '<option value="">Enter question to see suggestions</option>'; return; }
                 suggestTeamTimeout = setTimeout(async () => {
                     try {
-                        // 5. Team Suggestion Functionality: URL changed to /tickets/suggest_team
                         const response = await fetch('/tickets/suggest_team', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ question_text: questionText }) // FastAPI expects {"question_text": "..."}
+                            body: JSON.stringify({ question_text: questionText })
                         });
                         const data = await response.json();
-
-                        ticketTeamSelect.innerHTML = ''; // Clear loading/previous options
+                        ticketTeamSelect.innerHTML = ''; 
                         if (response.ok) {
-                            // FastAPI returns {"suggested_team": "...", "available_teams": ["TeamA", ...]}
                             if (data.available_teams && data.available_teams.length > 0) {
                                 data.available_teams.forEach(team => {
                                     const option = document.createElement('option');
-                                    option.value = team;
-                                    option.textContent = team;
-                                    if (team === data.suggested_team) {
-                                        option.selected = true;
-                                    }
+                                    option.value = team; option.textContent = team;
+                                    if (team === data.suggested_team) { option.selected = true; }
                                     ticketTeamSelect.appendChild(option);
                                 });
-                                if (data.suggested_team) {
-                                    teamSuggestionP.textContent = `Suggested Team: ${data.suggested_team}`;
-                                } else {
-                                    teamSuggestionP.textContent = 'Could not determine a specific suggestion, please select a team.';
-                                }
+                                teamSuggestionP.textContent = data.suggested_team ? `Suggested Team: ${data.suggested_team}` : 'Please select a team.';
                             } else {
                                 ticketTeamSelect.innerHTML = '<option value="">No teams available</option>';
                                 teamSuggestionP.textContent = 'No teams available for suggestion.';
@@ -447,58 +465,29 @@
                         teamSuggestionP.textContent = 'Error fetching team suggestions.';
                         ticketTeamSelect.innerHTML = '<option value="">Error loading teams</option>';
                     }
-                }, 500); // Debounce for 500ms
+                }, 500); 
             });
             
-            // Submit Ticket
             submitTicketButton.addEventListener('click', async () => {
                 const question_text = ticketQuestionTextarea.value.trim();
                 const selected_team = ticketTeamSelect.value;
                 ticketSubmissionMessage.textContent = '';
-
-                if (!question_text) {
-                    ticketSubmissionMessage.textContent = 'Please enter the issue/question.';
-                    ticketSubmissionMessage.style.color = 'red';
-                    return;
-                }
-                if (!selected_team) {
-                    ticketSubmissionMessage.textContent = 'Please select a team.';
-                    ticketSubmissionMessage.style.color = 'red';
-                    return;
-                }
-                if (!currentUserEmail) { // Ensure user is logged in
-                    ticketSubmissionMessage.textContent = 'Error: User not logged in.';
-                    ticketSubmissionMessage.style.color = 'red';
-                    return;
-                }
-
-
-                // Get last 5 chat messages for history (if any)
+                if (!question_text) { ticketSubmissionMessage.textContent = 'Please enter the issue/question.'; ticketSubmissionMessage.style.color = 'red'; return; }
+                if (!selected_team) { ticketSubmissionMessage.textContent = 'Please select a team.'; ticketSubmissionMessage.style.color = 'red'; return; }
+                if (!currentUserEmail) { ticketSubmissionMessage.textContent = 'Error: User not logged in.'; ticketSubmissionMessage.style.color = 'red'; return; }
                 const recentChatHistory = chatHistory.slice(-5);
                 const chat_history_json = JSON.stringify(recentChatHistory);
-
                 try {
-                    // 6. Ticket Submission Functionality: URL changed to /tickets/create, payload includes email
                     const response = await fetch('/tickets/create', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            email: currentUserEmail, // Add email to payload
-                            question_text: question_text,
-                            chat_history_json: chat_history_json,
-                            selected_team: selected_team
-                        })
+                        body: JSON.stringify({ email: currentUserEmail, question_text: question_text, chat_history_json: chat_history_json, selected_team: selected_team })
                     });
                     const data = await response.json();
-
                     if (response.ok) {
                         ticketSubmissionMessage.textContent = 'Ticket created successfully!';
                         ticketSubmissionMessage.style.color = 'green';
-                        setTimeout(() => { // Hide modal after a short delay
-                            hideTicketModal();
-                            ticketQuestionTextarea.value = ''; // Clear form
-                            ticketTeamSelect.innerHTML = ''; 
-                        }, 2000);
+                        setTimeout(() => { hideTicketModal(); }, 2000);
                     } else {
                         ticketSubmissionMessage.textContent = `Error: ${data.detail || data.error || 'Could not create ticket.'}`;
                         ticketSubmissionMessage.style.color = 'red';
@@ -510,103 +499,84 @@
                 }
             });
 
+            // --- Admin Panel Event Listeners ---
 
-            // Initial UI State
-            showLogin();
+            viewPermissionsButton.addEventListener('click', async () => {
+                adminViewPermissionsMessage.textContent = ''; adminViewPermissionsMessage.style.color = 'red';
+                userPermissionsDisplayDiv.classList.add('hidden');
+                if (!currentUserEmail || !currentUserProfile || currentUserProfile.user_hierarchy_level !== 3) {
+                    adminViewPermissionsMessage.textContent = 'Error: Admin privileges required.'; return;
+                }
+                const targetEmailToView = viewTargetUserEmailInput.value.trim();
+                if (!targetEmailToView) { adminViewPermissionsMessage.textContent = 'User Email to view is required.'; return; }
+                try {
+                    const response = await fetch(`/admin/view_user_permissions/${encodeURIComponent(targetEmailToView)}`, {
+                        method: 'GET', headers: { 'X-User-Email': currentUserEmail }
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        adminViewPermissionsMessage.textContent = 'Permissions fetched successfully.';
+                        adminViewPermissionsMessage.style.color = 'green';
+                        displayUserEmailSpan.textContent = data.user_email || targetEmailToView;
+                        displayUserPermissionsJsonPre.textContent = JSON.stringify(data, null, 2); 
+                        userPermissionsDisplayDiv.classList.remove('hidden');
+                    } else {
+                        adminViewPermissionsMessage.textContent = `Error: ${data.detail || data.error || 'Failed to fetch permissions.'}`;
+                    }
+                } catch (error) {
+                    console.error('Admin view permissions error:', error);
+                    adminViewPermissionsMessage.textContent = 'An error occurred while fetching permissions.';
+                }
+            });
 
-            // --- Admin Permissions Form Submission ---
             adminPermissionsForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                adminPermissionsMessage.textContent = '';
-                adminPermissionsMessage.style.color = 'red'; // Default to red for errors
-
+                adminPermissionsMessage.textContent = ''; adminPermissionsMessage.style.color = 'red';
                 if (!currentUserEmail || !currentUserProfile || currentUserProfile.user_hierarchy_level !== 3) {
-                    adminPermissionsMessage.textContent = 'Error: Admin privileges required. Please re-login.';
-                    return;
+                    adminPermissionsMessage.textContent = 'Error: Admin privileges required. Please re-login.'; return;
                 }
-
                 const targetEmail = targetUserEmailInput.value.trim();
-                if (!targetEmail) {
-                    adminPermissionsMessage.textContent = 'Target User Email is required.';
-                    return;
-                }
-
+                if (!targetEmail) { adminPermissionsMessage.textContent = 'Target User Email is required.'; return; }
                 const permissions = {};
                 const hierarchyLevel = targetHierarchyLevelInput.value.trim();
                 if (hierarchyLevel) {
                     permissions.user_hierarchy_level = parseInt(hierarchyLevel, 10);
-                    if (isNaN(permissions.user_hierarchy_level)) {
-                        adminPermissionsMessage.textContent = 'Invalid Hierarchy Level. Must be a number.';
-                        return;
-                    }
+                    if (isNaN(permissions.user_hierarchy_level)) { adminPermissionsMessage.textContent = 'Invalid Hierarchy Level.'; return; }
                 }
-
                 const departmentsStr = targetDepartmentsInput.value.trim();
-                if (departmentsStr) {
-                    permissions.departments = departmentsStr.split(',').map(d => d.trim()).filter(d => d);
-                } else {
-                    permissions.departments = []; // Send empty array if field is empty to clear
-                }
+                if (departmentsStr) { permissions.departments = departmentsStr.split(',').map(d => d.trim()).filter(d => d); }
+                else if (adminPermissionsForm.contains(document.activeElement) && document.activeElement.type === 'submit') { permissions.departments = []; }
 
                 const projectsStr = targetProjectsInput.value.trim();
-                if (projectsStr) {
-                    permissions.projects_membership = projectsStr.split(',').map(p => p.trim()).filter(p => p);
-                } else {
-                    permissions.projects_membership = []; // Send empty array if field is empty to clear
-                }
+                if (projectsStr) { permissions.projects_membership = projectsStr.split(',').map(p => p.trim()).filter(p => p); }
+                else if (adminPermissionsForm.contains(document.activeElement) && document.activeElement.type === 'submit') { permissions.projects_membership = []; }
 
                 const contextualRolesStr = targetContextualRolesInput.value.trim();
                 if (contextualRolesStr) {
-                    try {
-                        permissions.contextual_roles = JSON.parse(contextualRolesStr);
-                    } catch (e) {
-                        adminPermissionsMessage.textContent = 'Invalid JSON format for Contextual Roles. Please check syntax.';
-                        return;
-                    }
-                } else {
-                     permissions.contextual_roles = {}; // Send empty object if field is empty to clear
-                }
+                    try { permissions.contextual_roles = JSON.parse(contextualRolesStr); }
+                    catch (e) { adminPermissionsMessage.textContent = 'Invalid JSON for Contextual Roles.'; return; }
+                } else if (adminPermissionsForm.contains(document.activeElement) && document.activeElement.type === 'submit') { permissions.contextual_roles = {}; }
                 
-                if (Object.keys(permissions).length === 0) {
-                    adminPermissionsMessage.textContent = 'At least one permission field must be filled to update.';
-                    return;
-                }
-
-
+                if (Object.keys(permissions).length === 0) { adminPermissionsMessage.textContent = 'At least one permission field must be filled.'; return; }
                 try {
                     const response = await fetch('/admin/user_permissions', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-User-Email': currentUserEmail // Admin's email
-                        },
-                        body: JSON.stringify({
-                            target_email: targetEmail,
-                            permissions: permissions
-                        })
+                        headers: { 'Content-Type': 'application/json', 'X-User-Email': currentUserEmail },
+                        body: JSON.stringify({ target_email: targetEmail, permissions: permissions })
                     });
-
                     const data = await response.json();
-
                     if (response.ok) {
                         adminPermissionsMessage.textContent = data.message || 'Permissions updated successfully!';
                         adminPermissionsMessage.style.color = 'green';
-                        // Optionally clear form, or parts of it, on success
-                        // targetUserEmailInput.value = ''; // Keep target email for potential further edits
-                        targetHierarchyLevelInput.value = '';
-                        targetDepartmentsInput.value = '';
-                        targetProjectsInput.value = '';
-                        targetContextualRolesInput.value = '';
-                        
-                        // Display updated profile if returned
+                        targetHierarchyLevelInput.value = ''; targetDepartmentsInput.value = ''; targetProjectsInput.value = ''; targetContextualRolesInput.value = '';
                         if (data.updated_profile) {
-                            let profileDetails = "\nUpdated Profile:\n";
-                            for (const [key, value] of Object.entries(data.updated_profile)) {
-                                profileDetails += `${key}: ${JSON.stringify(value)}\n`;
-                            }
+                            let profileDetails = "\nUpdated Profile (relevant fields):\n";
+                            if (data.updated_profile.user_hierarchy_level !== undefined) profileDetails += `Hierarchy: ${data.updated_profile.user_hierarchy_level}\n`;
+                            if (data.updated_profile.departments !== undefined) profileDetails += `Departments: ${JSON.stringify(data.updated_profile.departments)}\n`;
+                            if (data.updated_profile.projects_membership !== undefined) profileDetails += `Projects: ${JSON.stringify(data.updated_profile.projects_membership)}\n`;
+                            if (data.updated_profile.contextual_roles !== undefined) profileDetails += `Roles: ${JSON.stringify(data.updated_profile.contextual_roles)}\n`;
                             adminPermissionsMessage.textContent += profileDetails;
                         }
-
                     } else {
                         adminPermissionsMessage.textContent = `Error: ${data.detail || data.error || 'Failed to update permissions.'}`;
                     }
@@ -615,6 +585,37 @@
                     adminPermissionsMessage.textContent = 'An error occurred while updating permissions.';
                 }
             });
+
+            removeUserButton.addEventListener('click', async () => {
+                adminRemoveUserMessage.textContent = ''; adminRemoveUserMessage.style.color = 'red';
+                if (!currentUserEmail || !currentUserProfile || currentUserProfile.user_hierarchy_level !== 3) {
+                    adminRemoveUserMessage.textContent = 'Error: Admin privileges required.'; return;
+                }
+                const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
+                if (!targetEmailToRemove) { adminRemoveUserMessage.textContent = 'User Email to remove is required.'; return; }
+                if (!confirm(`Are you sure you want to remove the user '${targetEmailToRemove}'? This action cannot be undone and will also remove their associated tickets and feedback.`)) { return; }
+                try {
+                    const response = await fetch('/admin/remove_user', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-User-Email': currentUserEmail },
+                        body: JSON.stringify({ target_email: targetEmailToRemove })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        adminRemoveUserMessage.textContent = data.message || 'User removed successfully!';
+                        adminRemoveUserMessage.style.color = 'green';
+                        removeTargetUserEmailInput.value = ''; 
+                    } else {
+                        adminRemoveUserMessage.textContent = `Error: ${data.detail || data.error || 'Failed to remove user.'}`;
+                    }
+                } catch (error) {
+                    console.error('Admin remove user error:', error);
+                    adminRemoveUserMessage.textContent = 'An error occurred while removing the user.';
+                }
+            });
+
+            // Initial UI State
+            showLogin();
         });
     </script>
 </body>
