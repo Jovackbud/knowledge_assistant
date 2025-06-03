@@ -8,6 +8,7 @@ from src.rag_processor import RAGService
 from src.ticket_system import suggest_ticket_team, create_ticket
 from src.feedback_system import record_feedback
 from src.database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
+from src.document_updater import synchronize_documents # Added import
 import logging # Added
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -28,14 +29,22 @@ logger.info(f"Is STATIC_DIR a directory? {STATIC_DIR.is_dir()}")
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting database initialization...")
+    logger.info("Starting application initialization...") # Changed log message slightly for broader scope
     try:
+        logger.info("Initializing all databases...")
         init_all_databases()
         logger.info("All databases initialized successfully.")
+
+        logger.info("Creating sample users if they don't exist...")
         _create_sample_users_if_not_exist()
         logger.info("Sample user creation check completed.")
+
+        logger.info("Synchronizing documents...") # Added log
+        synchronize_documents() # Added call
+        logger.info("Document synchronization completed.")
+
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}", exc_info=True)
+        logger.error(f"Application initialization failed: {e}", exc_info=True) # Changed log
         # Depending on the application's needs, you might want to re-raise the exception
         # or handle it in a way that prevents the app from starting if dbs are critical.
 
