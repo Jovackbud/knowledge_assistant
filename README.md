@@ -1,187 +1,206 @@
 # Service Assistant Project
 
-This project is a service assistant application that uses a local LLM and a Milvus vector database to provide responses and manage information. It is designed to be run using Docker and Docker Compose for production-like environments, but can also be run locally for development. The frontend is a simple HTML page served directly by FastAPI.
+**In Simple Terms:**
 
-## Prerequisites
+This project is a service assistant application that uses a local LLM (via Ollama) and a Milvus vector database to provide responses and manage information.
+-   **Documents get automatic 'access tags' based on their specific folder location.** For example, a document in `Docs/HR/StaffOnly/benefits_summary.pdf` gets tags like "HR Department" and "Staff Level Access." The more detailed the folder path, the more precise its access requirements become.
+-   **People get 'access keys' based on their overall job level, departments, project teams, and specific functional roles.** A Manager's general key, for instance, will typically also unlock documents accessible to Staff within their specific department.
+-   When someone asks a question, the system first **checks which documents their unique set of keys can unlock.**
+-   Then, it **searches for the answer *only* in those permitted documents.** This ensures people only see information they're allowed to access.
 
-*   **Python 3.8+:** Ensure Python is installed.
-*   **Docker Desktop:** (For Docker-based deployment) Ensure Docker Desktop (or Docker Engine with Docker Compose CLI plugin) is installed and running. Download from [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/).
-*   **Project Files:** Clone this repository.
-*   **Milvus Configuration Files:** (For Docker-based deployment) Ensure you have the `milvus` subdirectory in your project root, containing the necessary volume structure for Milvus (i.e., `milvus/volumes/etcd`, `milvus/volumes/minio`, `milvus/volumes/milvus`). The `docker-compose.yml` expects this structure for Milvus data persistence.
+## Features
 
-## Setup Instructions
+*   AI-powered chat using local Large Language Models (LLMs) via Ollama.
+*   Retrieval Augmented Generation (RAG) for answering questions based on a corpus of documents.
+*   Role-based and path-based access control for documents.
+*   Ticketing system integration (conceptual).
+*   Feedback mechanism for responses.
+*   Admin interface for user management (API-based).
 
-### 1. Environment and Dependencies
+## System Architecture
 
-*   **Create a Virtual Environment (Recommended):**
+The application consists of:
+
+*   **FastAPI Backend:** Serves the API, handles business logic, and manages user interactions. Also serves a simple static HTML frontend.
+*   **Ollama:** Runs local LLMs (e.g., Gemma, Llama) for text generation. Integrated directly into the application container for Render deployment.
+*   **Milvus:** Vector database used to store document embeddings for efficient similarity search in the RAG process. Typically run as a separate service stack for local development.
+*   **SQLite:** Used for storing application data such as user profiles, tickets, and feedback.
+
+The main workflow involves the user sending a query through the API. The FastAPI backend, using the RAG processor, converts the query into an embedding, searches Milvus for relevant document chunks (respecting user permissions), and then uses Ollama to generate a response based on the retrieved context.
+
+## Permissions Model Overview
+
+The system uses a sophisticated permissions model based on:
+
+1.  **Path-Derived Metadata:** Document access tags (department, project, role, hierarchy level) are automatically derived from their folder path within the `DOCS_FOLDER`.
+    *   **Specificity:** The most specific path takes precedence. E.g., rules for `Docs/HR/Staff/` override rules for `Docs/Staff/` for documents within the former.
+    *   **Naming Conventions:** Strict adherence to folder naming conventions (defined in `src/config.py`) is crucial for accurate permission assignment.
+2.  **User Profile Attributes:** User profiles store their department, projects, roles, and hierarchy level.
+    *   **Access Levels:** Higher access levels (e.g., Manager) typically include permissions of lower levels (e.g., Staff) within the same context (department/project).
+3.  **Cross-Functional Projects:** Users get access to project folders (e.g., `Docs/Projects/ProjectAlpha/`) if their profile includes membership for that project, regardless of their primary department.
+
+## Prerequisites for Local Development
+
+*   **Python 3.10+:** Ensure Python is installed.
+*   **Docker Desktop:** Required for running Milvus and associated services locally using `docker-compose`. Download from [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/).
+*   **Git:** For cloning the repository.
+*   **Ollama (Optional, if not using the app's internal Ollama for local dev):** If you wish to run Ollama separately for local FastAPI development (outside the main `docker-compose up` which includes it in the `app` service), install it from [https://ollama.com/](https://ollama.com/) and pull your desired model (e.g., `ollama pull gemma:2b`).
+
+## Setup and Running Locally
+
+1.  **Clone the Repository:**
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
-*   **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
+    git clone <repository_url>
+    cd <repository_name>
     ```
 
-### 2. Milvus Setup (Required for RAG features)
+2.  **Environment Variables:**
+    *   Create a `.env` file in the project root (this is gitignored).
+    *   Populate it with necessary variables. See `.env.example` if provided, or use the following template:
+        ```env
+        # Example .env for local development
+        LLM_MODEL="gemma:2b" # Or any other model pulled in Ollama
+        DOCS_FOLDER="sample_docs_phase_1" # Relative to project root, or an absolute path
 
-The application's RAG (Retrieval Augmented Generation) capabilities depend on Milvus.
+        # For Milvus running via docker-compose from this project
+        MILVUS_HOST="localhost" # Or "standalone" if app is run via `docker-compose up app`
+        MILVUS_PORT="19530"
 
-*   **Option A: Using Docker for Milvus (Recommended for Simplicity)**
-    *   If you have Docker, you can run Milvus using the provided `docker-compose.yml`.
-    *   To start the Milvus stack (and the application):
-        ```bash
-        docker-compose up -d --build
+        # For Ollama if app service runs it (default in docker-compose)
+        OLLAMA_BASE_URL="http://localhost:11434"
+
+        PYTHONUNBUFFERED=1
+        # Add other environment variables as defined in src/config.py if needed
         ```
-    *   If you only want to start the Milvus components (e.g., if running the app locally):
+    *   **Important:** If running the FastAPI app locally (`bash scripts/start.sh`) and Milvus via `docker-compose up etcd minio standalone`, set `MILVUS_HOST=localhost`. If running the entire stack including the app via `docker-compose up --build`, set `MILVUS_HOST=standalone` (as the app service can resolve Milvus by its service name).
+
+3.  **Milvus Vector Database (via Docker Compose):**
+    *   The `docker-compose.yml` file configures Milvus, Minio, and Etcd.
+    *   Ensure you have the `milvus/volumes/` subdirectories created in your project root if they don't exist (`milvus/volumes/etcd`, `milvus/volumes/minio`, `milvus/volumes/milvus`). These are gitignored but required for persistent Milvus data.
+    *   Start the Milvus stack:
         ```bash
         docker-compose up -d etcd minio standalone
         ```
-    *   Ensure your `.env.production` (or local environment variables) has `MILVUS_HOST=localhost` if running the FastAPI app locally and Milvus in Docker this way. If running the app within the main `docker-compose` setup, `MILVUS_HOST` should be `standalone`.
+    *   To stop them: `docker-compose down` (add `-v` to remove volumes).
 
-*   **Option B: Local Milvus Installation**
-    *   Install Milvus natively on your system. Refer to the [official Milvus installation guide](https://milvus.io/docs/install_standalone-docker.md) (though this link is for Docker, find the appropriate guide for your OS if you prefer a native install).
-    *   Ensure Milvus is running and accessible. You might need to adjust `MILVUS_HOST` and `MILVUS_PORT` environment variables accordingly.
-
-### 3. Environment Variables
-
-*   **Create `.env.production` File (or set environment variables):**
-    *   In the root directory of the project, create a file named `.env.production` (or configure your system's environment variables).
-    *   Add the following (adjust as needed):
-        ```env
-        MILVUS_HOST=localhost # Or 'standalone' if running app within the main docker-compose
-        LLM_MODEL=gemma:2b    # Example model, ensure it's available via Ollama
-        PYTHONUNBUFFERED=1
-        DOCS_FOLDER=sample_docs_phase_1 # Relative to the './data' volume if using Docker for the app
-        OLLAMA_BASE_URL=http://localhost:11434 # Default Ollama URL
+4.  **Application Setup (Python Virtual Environment):**
+    *   Create and activate a virtual environment:
+        ```bash
+        python -m venv venv
+        source venv/bin/activate  # On Windows: venv\Scripts\activate
         ```
-    *   **Note on `LLM_MODEL`**: The application uses Ollama. When running the FastAPI app locally (outside the main `docker-compose` setup), you'll need to have Ollama installed, running, and the specified model pulled (e.g., `ollama pull gemma:2b`). If Ollama is running on a different host/port, update `OLLAMA_BASE_URL`. When using `docker-compose up --build`, the `app` service will handle Ollama.
+    *   Install dependencies:
+        ```bash
+        pip install -r requirements.txt
+        ```
 
-### 4. Place Documents (Optional, for RAG)
+5.  **Place Documents:**
+    *   Create the folder specified by `DOCS_FOLDER` in your `.env` file (e.g., `./sample_docs_phase_1/`).
+    *   Place your `.txt`, `.pdf`, or `.md` files there. The application will process these on startup.
 
-*   The application expects documents in a folder (default is `./data/sample_docs_phase_1/`).
-*   Create this directory and place your `.txt`, `.pdf`, or `.md` files there if you want to use the RAG features. The `init_all_databases()` function called on startup will attempt to process these.
-
-## Running the Application
-
-The application now runs as a single FastAPI service, which also serves the HTML frontend.
-
-*   **Option A: Using Docker Compose (Recommended for Production-like Environment)**
-    1.  **Configure `.env.production` for Docker:**
-        *   Set `MILVUS_HOST=standalone`.
-        *   The `LLM_MODEL` will be pulled by the `app` service's Ollama instance.
-        *   `OLLAMA_BASE_URL` will be `http://localhost:11434` (Ollama runs in the same container as the app).
-            ```env
-            MILVUS_HOST=standalone
-            LLM_MODEL=gemma:2b
-            PYTHONUNBUFFERED=1
-            DOCS_FOLDER=sample_docs_phase_1
-            OLLAMA_BASE_URL=http://localhost:11434
+6.  **Running the Application:**
+    *   **Option A: Locally with Uvicorn (Milvus running separately in Docker)**
+        *   Ensure Ollama is running locally if you haven't configured the app to use an external one.
+        *   Run the FastAPI application:
+            ```bash
+            bash scripts/start.sh
             ```
-    2.  **Build and Run Containers:**
-        ```bash
-        docker-compose up --build -d
-        ```
-        The `-d` flag runs the containers in detached mode.
-    3.  **Accessing the Application:**
-        *   The HTML frontend is accessible at: [http://localhost:8000](http://localhost:8000)
-        *   API Documentation (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
-        *   API Documentation (ReDoc): [http://localhost:8000/redoc](http://localhost:8000/redoc)
+    *   **Option B: Fully with Docker Compose (includes app, Milvus, and embedded Ollama)**
+        *   This uses the `Dockerfile` to build the app image, which includes Ollama.
+        *   Set `MILVUS_HOST=standalone` in your `.env` file.
+        *   Build and run all services:
+            ```bash
+            docker-compose up --build -d app # This will also start dependent Milvus services
+            ```
+            Or `docker-compose up --build` to see logs.
+    *   **Accessing the Application:**
+        *   Web Interface: [http://localhost:8000/](http://localhost:8000/)
+        *   API Docs (Swagger): [http://localhost:8000/docs](http://localhost:8000/docs)
+        *   API Docs (ReDoc): [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-*   **Option B: Local Development (without Docker for the app itself)**
-    1.  **Ensure Prerequisites are Met:**
-        *   Python installed, virtual environment activated, dependencies installed.
-        *   Milvus is running and accessible (either via Docker or locally).
-        *   Ollama is installed, running, and the desired model is pulled (e.g., `ollama pull gemma:2b`).
-        *   Environment variables are set (e.g., in `.env.production` or system-wide), with `MILVUS_HOST=localhost` if Milvus is outside the app's direct environment.
-    2.  **Run the FastAPI Application using the script:**
-        ```bash
-        bash scripts/start.sh
-        ```
-        This script uses Uvicorn to run the application.
-    3.  **Accessing the Application:**
-        *   The HTML frontend is accessible at: [http://localhost:8000](http://localhost:8000)
-        *   API Documentation (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
-        *   API Documentation (ReDoc): [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-## Adding New Users for Local Testing
-
-User profiles for local testing and initial setup are managed within the `src/database_utils.py` file, specifically in the `_create_sample_users_if_not_exist` function.
-
-To add a new user:
-
-1.  **Edit `src/database_utils.py`**:
-    Open the file and locate the `sample_users` dictionary within the `_create_sample_users_if_not_exist` function.
-2.  **Add a New User Entry**:
-    Add a new entry to the dictionary using the user's email as the key. Ensure that the department and project tags used are valid according to the system's configuration (typically defined or expected by other parts of the system, like document tagging).
-
-    Here's an example structure for a new user:
-    ```python
-    "new.user@example.com": {
-        "user_hierarchy_level": 0,  # Defines access level, e.g., 0 for general, higher for more access
-        "departments": ["IT_DEPARTMENT"], # User's primary department(s)
-        "projects_membership": ["PROJECT_BETA"], # Projects the user is part of
-        "contextual_roles": {
-            # Roles within specific projects or departments
-            "PROJECT_BETA": ["DEVELOPER_ROLE"], 
-            "IT_DEPARTMENT": ["HELPDESK_ROLE"] 
-        }
-    }
-    ```
-    *   `user_hierarchy_level`, `departments`, `projects_membership`, and `contextual_roles` collectively define the user's access rights and how information is filtered or presented to them. Ensure these values, especially the string tags for departments, projects, and roles, are consistent with how they are used elsewhere (e.g., in document metadata or access control logic).
-
-3.  **Restart the FastAPI Application**:
-    After saving your changes to `src/database_utils.py`, the FastAPI application needs to be restarted.
-    *   If running with `docker-compose up`, you can restart the `app` service: `docker-compose restart app` or stop and restart all: `docker-compose down && docker-compose up --build -d`.
-    *   If running with `bash scripts/start.sh` or `uvicorn` directly, stop the server (Ctrl+C) and run the start command again.
-
-    Upon restart, the `_create_sample_users_if_not_exist` function will execute, and if the new user's email is not already in the user database, their profile will be added.
-
-## Local LLM and Vector Database
-
-*   **LLM:** The application uses Ollama. When run locally (Option B for running the app), ensure Ollama is installed and serving the model. When run with Docker (Option A), the `app` container runs its own Ollama instance and pulls the model specified in `.env.production`.
-*   **Vector Database:** Milvus. Can be run via Docker (using the provided `docker-compose.yml`) or as a separate local installation. Data for Dockerized Milvus is persisted in `./milvus/volumes/`.
-
-## Stopping the Application
-
-*   **Local `start.sh` / Uvicorn:** Press `Ctrl+C` in the terminal where the script or Uvicorn is running.
-*   **Docker Compose:**
-    *   If running in detached mode (`-d`), use:
-        ```bash
-        docker-compose down
-        ```
-    *   If running in the foreground, press `Ctrl+C` in the terminal, then run `docker-compose down`.
-    *   To also remove the Milvus data volumes (BE CAREFUL, this deletes Milvus data from `./milvus/volumes/`):
-        ```bash
-        # docker-compose down -v
-        ```
-
-## Project Structure (Simplified)
+## Project Structure
 
 ```
 .
-├── data/                    # Default directory for documents (e.g., sample_docs_phase_1)
-│   └── sample_docs_phase_1/
-│       └── example.txt
-├── milvus/                  # Milvus data volumes (for Docker)
-│   └── volumes/
-├── scripts/                 # Helper scripts
-│   └── start.sh             # Script to run the FastAPI app locally
-├── src/                     # Source code
+├── .dockerignore          # Specifies intentionally untracked files that Docker should ignore
+├── .env                   # Local environment variables (gitignored)
+├── .gitignore             # Specifies intentionally untracked files that Git should ignore
+├── Dockerfile             # Instructions for building the application Docker image
+├── README.md              # This file
+├── ADMIN_README.md        # Guide for non-technical administrators
+├── docker-compose.yml     # Defines services for local development (app, Milvus, etc.)
+├── requirements.txt       # Python dependencies
+├── scripts/               # Utility scripts
+│   ├── entrypoint.sh      # Entrypoint for Docker image (starts Ollama, pulls model, runs app)
+│   ├── initialize.py    # Initialization logic (called by main app on startup)
+│   └── start.sh           # Script to run FastAPI app locally using Uvicorn
+├── src/                   # Source code for the application
 │   ├── __init__.py
-│   ├── auth_service.py      # User authentication logic
-│   ├── config.py            # Configuration models (Pydantic)
-│   ├── database_utils.py    # Database initialization & utilities (incl. sample users)
-│   ├── document_updater.py  # For processing and adding documents to Milvus
-│   ├── feedback_system.py   # Feedback recording logic
-│   ├── main.py              # FastAPI application entry point
-│   ├── rag_processor.py     # RAG logic (Langchain, Milvus, Ollama)
-│   └── ticket_system.py     # Ticketing logic
-├── static/                  # Static frontend files
-│   └── index.html           # HTML frontend served by FastAPI
-├── .env.production          # Environment variables (user-created, gitignored)
-├── docker-compose.yml       # Docker Compose configuration
-├── Dockerfile               # Dockerfile for the application
-├── requirements.txt         # Python dependencies
-└── README.md                # This file
+│   ├── auth_service.py    # Authentication and user profile logic
+│   ├── config.py          # Application configuration and Pydantic models
+│   ├── database_utils.py  # Database interaction utilities
+│   ├── document_updater.py# Logic for processing and syncing documents to Milvus
+│   ├── feedback_system.py # Feedback recording logic
+│   ├── main.py            # FastAPI application entry point and API routes
+│   ├── rag_processor.py   # RAG logic (Langchain, Milvus, Ollama interaction)
+│   └── ticket_system.py   # Ticketing system logic
+├── static/                # Static files (e.g., HTML for frontend)
+│   └── index.html
+└── milvus/                # Placeholder for Milvus volumes (gitignored, created locally)
+    └── volumes/
 ```
+
+## Deployment to Render
+
+This application is designed to be deployed to Render as a Docker container.
+
+1.  **Repository Setup:** Ensure your `Dockerfile`, `requirements.txt`, `scripts/entrypoint.sh`, `src/`, and `static/` directories are committed to your Git repository.
+
+2.  **Render Service Creation:**
+    *   On the Render Dashboard, create a new "Web Service".
+    *   Connect your Git repository.
+    *   **Runtime:** Select "Docker". Render will use the `Dockerfile` from your repository.
+
+3.  **Environment Variables:**
+    *   In your Render service settings, go to the "Environment" section.
+    *   Add the following crucial environment variables:
+        *   `LLM_MODEL`: The Ollama model to pull and use (e.g., `gemma:2b`). The `entrypoint.sh` script will attempt to pull this model on startup.
+        *   `OLLAMA_BASE_URL`: Set this to `http://localhost:11434`. Since Ollama runs within the same container, the application can access it via localhost.
+        *   `DOCS_FOLDER`: Path within the container where documents are stored/mounted (e.g., `/data/docs`).
+        *   `DATA_DIR_PATH`: Path for databases (e.g. `/data/database`). `src/config.py` uses this to construct `TICKET_DB_PATH`, `FEEDBACK_DB_PATH`, etc.
+        *   `PYTHONUNBUFFERED=1`: Good for seeing logs immediately.
+        *   `MILVUS_HOST`, `MILVUS_PORT`: If you are using a managed Milvus service (e.g., Zilliz Cloud, or another Milvus instance accessible via the internet), set these accordingly. If Milvus is intended to run *within* this setup (not typical for production Render without complex private services), this guide would need extension. For now, this guide assumes a local/dev setup for Milvus or an external one for cloud deployment. **Note:** Running Milvus itself directly on Render's basic web service instances is not straightforward. Consider a managed vector database for production.
+    *   Add any other environment variables your `src/config.py` might require.
+
+4.  **Render Disks (Persistence):**
+    *   **Ollama Models:**
+        *   Path in container: `/root/.ollama/models` (this is where `entrypoint.sh` and Ollama will store models, as per `ENV OLLAMA_MODELS` in Dockerfile).
+        *   Create a Render Disk and mount it to this path. This prevents re-downloading models on every deploy/restart.
+    *   **Application Data (Databases & Documents):**
+        *   Path in container for databases: `/data/database` (SQLite files like `tickets.db`, `auth_profiles.db` will be stored here, based on `DB_PARENT_DIR` in `src/config.py`).
+        *   Path in container for documents: `/data/docs` (Set your `DOCS_FOLDER` environment variable to this, e.g., `DOCS_FOLDER=/data/docs/my_documents`).
+        *   Create a Render Disk and mount it to `/data`. This single disk can hold both `database` and `docs` subdirectories.
+
+5.  **Build and Deploy:**
+    *   Render will automatically build your Docker image from the `Dockerfile` and deploy it.
+    *   The `ENTRYPOINT` and `CMD` specified in your `Dockerfile` (`entrypoint.sh` and then `uvicorn`) will be used.
+
+6.  **Health Check:**
+    *   Render typically uses TCP health checks by default.
+    *   You can configure an HTTP health check to target an endpoint like `/docs` (FastAPI's Swagger UI) or create a dedicated `/healthz` endpoint in `src/main.py` that returns a 200 OK.
+
+7.  **Accessing Your Deployed App:** Render will provide you with a `*.onrender.com` URL for your service.
+
+## Key Configuration & Management Points
+
+*   **Folder Naming Conventions:** The accuracy of document permissions heavily relies on strict adherence to folder naming conventions defined in `src/config.py` (e.g., for departments, roles, hierarchy levels). Inconsistent naming will lead to incorrect permission assignments.
+*   **User Profile Accuracy:** Ensure user profile data (department, project, role, hierarchy level) in the `auth_profiles.db` is accurate and up-to-date. This is critical for correct permission enforcement.
+*   **Document Synchronization:** Documents placed in the `DOCS_FOLDER` (on the persistent disk) are processed and indexed by the application on startup (due to `synchronize_documents()` in `main.py`'s startup event).
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change. Please make sure to update tests as appropriate.
+
+## License
+
+[MIT](https://choosealicense.com/licenses/mit/)

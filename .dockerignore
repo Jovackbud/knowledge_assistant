@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*venv/
+.env
+.env.*
+env/
+venv.bak/
+ENV/
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# IDE
+.vscode/
+.idea/
+
+# Local data & logs
+milvus/
+database/
+data/
+sample_docs_phase_1/
+*.log
+logs/
+
+# Documentation (excluding README.md and ADMIN_README.md which will be created)
+advanced_access_control_concepts.md
+assumptions_and_considerations.md
+handling_folder_restructuring.md
+permissions_clarifications.md
+project_cross_functional_access.md
+revised_simple_explanation.md
+user_profile_management_considerations.md
+
+# Scripts not needed in image
+remove_old_collection.py
+
+# OS specific
+.DS_Store
+Thumbs.db
