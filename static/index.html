@@ -38,7 +38,6 @@
             white-space: pre-wrap; word-wrap: break-word; background-color: #efefef; 
             padding: 10px; border-radius: 3px; 
         }
-        /* Style for the Admin Panel Toggle Button Area */
         #admin-controls-area { margin-top: 15px; padding-top:10px; border-top: 1px solid #eee; }
         #toggleAdminPanelButton { background-color: #ffc107; color: #212529; }
         #toggleAdminPanelButton:hover { background-color: #e0a800; }
@@ -61,10 +60,7 @@
         <div id="user-profile-section" class="hidden">
             <h2>User Profile</h2>
             <p><strong>Email:</strong> <span id="profile-email"></span></p>
-            <p><strong>Hierarchy Level:</strong> <span id="profile-hierarchy"></span></p>
-            <p><strong>Departments:</strong> <span id="profile-departments"></span></p>
-            <p><strong>Projects:</strong> <span id="profile-projects"></span></p>
-            <p><strong>Roles:</strong> <span id="profile-roles"></span></p>
+            <!-- DETAILED PERMISSIONS FOR LOGGED-IN USER WERE REMOVED FROM HERE -->
             <button id="logoutButton">Logout</button>
 
             <!-- Area for Admin Toggle Button - only visible to admins -->
@@ -183,10 +179,7 @@
             const loginError = document.getElementById('login-error');
 
             const profileEmail = document.getElementById('profile-email');
-            const profileHierarchy = document.getElementById('profile-hierarchy');
-            const profileDepartments = document.getElementById('profile-departments');
-            const profileProjects = document.getElementById('profile-projects');
-            const profileRoles = document.getElementById('profile-roles');
+            // Detailed profile span selectors (profileHierarchy, etc.) were removed as they are no longer populated
             const logoutButton = document.getElementById('logoutButton');
 
             const chatHistoryDiv = document.getElementById('chat-history');
@@ -210,14 +203,12 @@
             const adminControlsArea = document.getElementById('admin-controls-area');
             const toggleAdminPanelButton = document.getElementById('toggleAdminPanelButton');
             const adminPermissionsSection = document.getElementById('admin-permissions-section');
-            // View User Permissions
             const viewTargetUserEmailInput = document.getElementById('view-target-user-email');
             const viewPermissionsButton = document.getElementById('viewPermissionsButton');
             const adminViewPermissionsMessage = document.getElementById('admin-view-permissions-message');
             const userPermissionsDisplayDiv = document.getElementById('user-permissions-display');
             const displayUserEmailSpan = document.getElementById('display-user-email');
             const displayUserPermissionsJsonPre = document.getElementById('display-user-permissions-json');
-            // Manage User Permissions
             const adminPermissionsForm = document.getElementById('admin-permissions-form');
             const targetUserEmailInput = document.getElementById('target-user-email');
             const targetHierarchyLevelInput = document.getElementById('target-hierarchy-level');
@@ -225,14 +216,13 @@
             const targetProjectsInput = document.getElementById('target-projects');
             const targetContextualRolesInput = document.getElementById('target-contextual-roles');
             const adminPermissionsMessage = document.getElementById('admin-permissions-message');
-            // Remove User
             const removeTargetUserEmailInput = document.getElementById('remove-target-user-email');
             const removeUserButton = document.getElementById('removeUserButton');
             const adminRemoveUserMessage = document.getElementById('admin-remove-user-message');
 
             // --- State Variables ---
             let currentUserEmail = null;
-            let currentUserProfile = null;
+            let currentUserProfile = null; 
             let currentQuestion = null;
             let currentAnswer = null;
             let chatHistory = []; 
@@ -245,37 +235,21 @@
                 feedbackSection.classList.add('hidden');
                 ticketCreationTrigger.classList.add('hidden');
                 ticketModal.classList.add('hidden');
-                // Admin specific UI
                 adminControlsArea.classList.add('hidden'); 
                 adminPermissionsSection.classList.add('hidden'); 
                 userPermissionsDisplayDiv.classList.add('hidden'); 
             }
 
-            function showChat() { // Called after successful login
+            function showChat() {
                 loginSection.classList.add('hidden');
                 userProfileSection.classList.remove('hidden'); 
                 chatSection.classList.remove('hidden');
                 ticketCreationTrigger.classList.remove('hidden');
-                // Admin panel visibility is handled in login logic
             }
             
-            function hideFeedback() {
-                feedbackSection.classList.add('hidden');
-                feedbackMessage.textContent = '';
-            }
-
-            function showFeedback() {
-                feedbackButtonsDiv.classList.remove('hidden'); 
-                feedbackSection.classList.remove('hidden');
-                feedbackMessage.textContent = ''; 
-            }
-            
-            function hideTicketModal() {
-                ticketModal.classList.add('hidden');
-                ticketSubmissionMessage.textContent = '';
-                teamSuggestionP.textContent = '';
-                ticketQuestionTextarea.value = '';
-            }
+            function hideFeedback() { feedbackSection.classList.add('hidden'); feedbackMessage.textContent = ''; };
+            function showFeedback() { feedbackButtonsDiv.classList.remove('hidden'); feedbackSection.classList.remove('hidden'); feedbackMessage.textContent = ''; };
+            function hideTicketModal() { ticketModal.classList.add('hidden'); ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = ''; ticketQuestionTextarea.value = '';};
 
             // --- Event Listeners ---
 
@@ -293,19 +267,16 @@
                     if (response.ok) {
                         currentUserEmail = data.user_email; 
                         currentUserProfile = data; 
-                        profileEmail.textContent = currentUserProfile.user_email || 'N/A';
-                        profileHierarchy.textContent = currentUserProfile.user_hierarchy_level !== undefined ? currentUserProfile.user_hierarchy_level : 'N/A';
-                        profileDepartments.textContent = (currentUserProfile.departments && currentUserProfile.departments.length > 0) ? currentUserProfile.departments.join(', ') : 'None';
-                        profileProjects.textContent = (currentUserProfile.projects_membership && currentUserProfile.projects_membership.length > 0) ? currentUserProfile.projects_membership.join(', ') : 'None';
-                        profileRoles.textContent = (currentUserProfile.contextual_roles && Object.keys(currentUserProfile.contextual_roles).length > 0) ? JSON.stringify(currentUserProfile.contextual_roles) : 'None';
                         
-                        showChat(); // Shows user profile, chat, etc.
+                        profileEmail.textContent = currentUserProfile.user_email || 'N/A';
+                        // Detailed profile info (hierarchy, depts, etc.) is no longer directly displayed here
+
+                        showChat();
                         emailInput.value = ''; 
 
-                        // Handle Admin UI elements
-                        if (currentUserProfile.user_hierarchy_level === 3) { // Admin Level Check
-                            adminControlsArea.classList.remove('hidden'); // Show the "Admin Panel" button's container
-                            toggleAdminPanelButton.textContent = 'Show Admin Panel'; // Set initial text
+                        if (currentUserProfile.user_hierarchy_level === 3) {
+                            adminControlsArea.classList.remove('hidden'); 
+                            toggleAdminPanelButton.textContent = 'Show Admin Panel'; 
                         } else {
                             adminControlsArea.classList.add('hidden'); 
                             adminPermissionsSection.classList.add('hidden'); 
@@ -324,18 +295,14 @@
             logoutButton.addEventListener('click', () => {
                 currentUserEmail = null; currentUserProfile = null; currentQuestion = null; currentAnswer = null; chatHistory = [];
                 chatHistoryDiv.innerHTML = '';
-                profileEmail.textContent = ''; profileHierarchy.textContent = ''; profileDepartments.textContent = ''; profileProjects.textContent = ''; profileRoles.textContent = '';
+                profileEmail.textContent = ''; 
+                
                 hideFeedback();
-                
-                // Clear and hide all admin related things
-                adminPermissionsMessage.textContent = ''; 
-                adminRemoveUserMessage.textContent = ''; 
-                adminViewPermissionsMessage.textContent = '';
+                adminPermissionsMessage.textContent = ''; adminRemoveUserMessage.textContent = ''; adminViewPermissionsMessage.textContent = '';
                 adminPermissionsForm.reset();
-                removeTargetUserEmailInput.value = ''; 
-                viewTargetUserEmailInput.value = ''; 
+                removeTargetUserEmailInput.value = ''; viewTargetUserEmailInput.value = ''; 
                 
-                showLogin(); // This also hides adminControlsArea, adminPermissionsSection, and userPermissionsDisplayDiv
+                showLogin(); 
             });
 
             toggleAdminPanelButton.addEventListener('click', () => {
