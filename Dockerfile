@@ -1,4 +1,5 @@
 FROM python:3.12
+ARG OLLAMA_MODEL=gemma:2b-q4_0
 
 WORKDIR /app
 
@@ -10,9 +11,13 @@ USER root
 
 # Install Ollama
 RUN echo "Installing Ollama..." &&     curl -fsSL https://ollama.com/install.sh | sh &&     echo "Ollama installation script finished."
+RUN ollama pull ${OLLAMA_MODEL}
 
-# Ensure Ollama is in PATH - the install script should handle this.
-# If not, common locations are /usr/local/bin/ollama or /opt/ollama/ollama
+# Create a non-root user and group
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Switch to the non-root user
+USER appuser
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -26,10 +31,3 @@ RUN mkdir -p /data/{docs,database}
 
 # Expose port for FastAPI
 EXPOSE 8000
-# EXPOSE 8501 # Removed, as this image is now FastAPI-only
-
-# Pull the LLM model
-# This command is executed by the ollama CLI after its installation.
-# Ollama startup and model pulling should be handled by its own service or an init script if needed.
-
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

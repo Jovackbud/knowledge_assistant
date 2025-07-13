@@ -1,5 +1,5 @@
 import logging
-from src.database_utils import save_feedback
+from .database_utils import save_feedback
 
 logger = logging.getLogger(__name__)
 

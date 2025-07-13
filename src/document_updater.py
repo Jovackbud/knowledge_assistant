@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_milvus import Milvus
 from typing import Dict, List, Tuple, Any, Optional
 
-from config import (
+from .config import (
     DOCS_FOLDER, ALLOWED_EXTENSIONS, MILVUS_COLLECTION_NAME, VECTOR_DIMENSION,
     CHUNK_SIZE, CHUNK_OVERLAP, SYNC_STATE_FILE,
     MILVUS_HOST, MILVUS_PORT, EMBEDDING_MODEL,

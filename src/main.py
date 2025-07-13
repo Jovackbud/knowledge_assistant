@@ -2,18 +2,20 @@ from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from typing import Dict, Any
 from fastapi.responses import FileResponse
-from src.auth_service import fetch_user_access_profile, update_user_permissions_by_admin, remove_user_by_admin
-from src.config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL # Added ADMIN_HIERARCHY_LEVEL
-from src.rag_processor import RAGService
-from src.ticket_system import suggest_ticket_team, create_ticket
-from src.feedback_system import record_feedback
-from src.database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
-import logging # Added
+from .auth_service import fetch_user_access_profile, update_user_permissions_by_admin, remove_user_by_admin
+from .config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS
+from .rag_processor import RAGService
+from .ticket_system import suggest_ticket_team, create_ticket
+from .feedback_system import record_feedback
+from .database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
+import logging
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import json
 import os
-
 app = FastAPI()
+rag_service: RAGService | None = None
 
 SRC_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SRC_DIR.parent
@@ -28,16 +30,21 @@ logger.info(f"Is STATIC_DIR a directory? {STATIC_DIR.is_dir()}")
 
 @app.on_event("startup")
 async def startup_event():
+    global rag_service
     logger.info("Starting database initialization...")
     try:
         init_all_databases()
         logger.info("All databases initialized successfully.")
         _create_sample_users_if_not_exist()
         logger.info("Sample user creation check completed.")
+
+        logger.info ("Initializing RAG Service...")
+        rag_service = RAGService.from_config()
+        logger.info("RAG Service initialized successfully.")
+
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}", exc_info=True)
-        # Depending on the application's needs, you might want to re-raise the exception
-        # or handle it in a way that prevents the app from starting if dbs are critical.
+        logger.error(f"Application startup failed: {e}", exc_info=True)
+        raise
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/")
@@ -62,29 +69,50 @@ async def login(credentials: AuthCredentials):
         # Log the exception e if a logger is configured
         raise HTTPException(status_code=500, detail="Internal server error during login")
 
+# In src/main.py, add this import at the top
+from fastapi.responses import StreamingResponse
+
+# ...
+
 @app.post("/rag/chat")
 async def rag_chat(request: RAGRequest):
+    if rag_service is None:
+        raise HTTPException(status_code=503, detail="RAG Service is not available")
+    
     try:
-        # TODO: Explore initializing RAGService once at startup for optimization
-        rag_service = RAGService.from_config()
-        
-        # Get the RAG chain for the user
-        # This requires fetch_user_access_profile to be available and working
         user_profile = fetch_user_access_profile(request.email)
         if not user_profile:
-            raise HTTPException(status_code=404, detail="User profile not found for RAG service")
+            raise HTTPException(status_code=404, detail="User profile not found")
 
-        chain = rag_service.get_rag_chain(user_profile) # Pass the entire profile
+        # Get the new chain and the separate retriever
+        chain, retriever = rag_service.get_rag_chain(user_profile, request.chat_history)
         
-        # Invoke the chain with the user's prompt
-        response = chain.invoke(request.prompt)
-        
-        return {"response": response}
-    except HTTPException as http_exc: # Re-raise HTTPException
+        async def stream_generator():
+            try:
+                # 1. Stream the answer token by token
+                full_answer = ""
+                async for chunk in chain.astream({"question": request.prompt}):
+                    full_answer += chunk
+                    data_to_send = {"answer_chunk": chunk}
+                    yield f"data: {json.dumps(data_to_send)}\n\n"
+                
+                # 2. After the answer is complete, get the sources
+                retrieved_docs = retriever.invoke(request.prompt)
+                sources = [doc.metadata.get("source", "Unknown") for doc in retrieved_docs]
+                data_to_send = {"sources": sources}
+                yield f"data: {json.dumps(data_to_send)}\n\n"
+
+            except Exception as e:
+                logger.error(f"Error during RAG stream: {e}", exc_info=True)
+                error_data = {"error": "An error occurred during generation."}
+                yield f"data: {json.dumps(error_data)}\n\n"
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+    except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        # Log the exception e if a logger is configured
-        # Consider more specific error handling for RAGService initialization vs. chain invocation
+        logger.error(f"Error in RAG service: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error in RAG service: {str(e)}")
 
 # --- Ticket System Endpoints ---
@@ -111,11 +139,11 @@ async def create_ticket_endpoint(request: CreateTicketRequest):
             chat_history=request.chat_history_json,
             final_selected_team=request.selected_team
         )
-        if ticket_id:
+        if ticket_id is not None:
             return {"message": "Ticket created successfully", "ticket_id": ticket_id}
         else:
             # This case might indicate an issue within create_ticket that didn't raise an exception
-            raise HTTPException(status_code=500, detail="Ticket creation failed for an unknown reason.")
+            raise HTTPException(status_code=500, detail="Ticket creation failed in the database.")
     except HTTPException as http_exc: # Re-raise HTTPException
         raise http_exc
     except Exception as e:
@@ -139,6 +167,13 @@ async def record_feedback_endpoint(request: FeedbackRequest):
         raise HTTPException(status_code=500, detail=f"Error recording feedback: {str(e)}")
 
 # --- Admin System Endpoints ---
+@app.get("/admin/config_tags")
+async def get_config_tags():
+    # This endpoint provides necessary config data to the frontend UI
+    return {
+        "known_department_tags": KNOWN_DEPARTMENT_TAGS
+        # In the future, you could add known project tags here too
+    }
 
 class UserPermissionsRequest(BaseModel):
     target_email: str

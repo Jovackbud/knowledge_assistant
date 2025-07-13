@@ -1,0 +1,76 @@
+# render.yaml - Infrastructure as Code for the Knowledge Assistant
+
+# Defines the persistent storage disks needed by our services.
+disks:
+  - name: app-data         # A name for the disk for our web app
+    mountPath: /data       # Where the disk will be attached inside the container
+    sizeGB: 1              # 1 GB is a good start for SQLite dbs and docs
+  - name: milvus-data      # A name for the disk for the Milvus service
+    mountPath: /var/lib/milvus # The default data path for Milvus
+    sizeGB: 5              # 5-10 GB is a good start for vector data
+
+services:
+  # 1. The main application Web Service
+  - type: web
+    name: knowledge-assistant  # The name of your service on Render
+    env: docker                # We are deploying a pre-built Docker image
+    
+    # IMPORTANT: Replace this URL with the path to your image on Docker Hub
+    image:
+      url: your-dockerhub-username/knowledge-assistant:1.0
+
+    # Command to start the application
+    startCommand: "bash scripts/start.sh"
+
+    # Health check to ensure zero-downtime deploys
+    healthCheck:
+      path: /
+      initialDelaySeconds: 120 # Give it time for the RAG service to load
+
+    # Define the ports
+    ports:
+      - port: 8000
+        protocol: TCP
+
+    # Attach the persistent disk for our app's data
+    disk:
+      name: app-data
+      mountPath: /data
+
+    # Environment variables required by the application
+    # Secrets should be set in the Render dashboard, not here.
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: MILVUS_HOST
+        # This is how services talk to each other on Render's private network
+        value: milvus-standalone
+      - key: MILVUS_PORT
+        value: 19530
+      - key: LLM_MODEL
+        # Match the model baked into your Docker image
+        value: gemma:2b-q4_0
+      # Add any other non-secret env vars from your .env file here
+
+  # 2. The Milvus standalone Private Service
+  - type: pvt
+    name: milvus-standalone # This name is used as the hostname by the app service
+    env: docker              # It also runs from a Docker image
+
+    # We use the official Milvus standalone image
+    image:
+      url: milvusdb/milvus:v2.5.0
+
+    # The command to run Milvus in standalone mode
+    startCommand: "milvus run standalone"
+    
+    # Attach the persistent disk for Milvus's data
+    disk:
+      name: milvus-data
+      mountPath: /var/lib/milvus
+
+    # Health check for the Milvus service
+    healthCheck:
+      path: /healthz
+      port: 9091 # Milvus health check runs on port 9091
+      initialDelaySeconds: 60

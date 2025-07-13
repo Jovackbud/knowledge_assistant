@@ -2,7 +2,7 @@ import sqlite3
 import json
 import logging
 from typing import Dict, Optional, List, Any
-from config import (
+from .config import (
     TICKET_DB_PATH, FEEDBACK_DB_PATH, AUTH_DB_PATH,
     DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL, DEFAULT_DEPARTMENT_TAG
 )
@@ -87,7 +87,7 @@ def init_feedback_db():
 
 
 def save_ticket(user_email: str, question: str, chat_history: str,
-                suggested_team: str, selected_team: str) -> bool:
+                suggested_team: str, selected_team: str) -> Optional[int]:
     try:
         with sqlite3.connect(TICKET_DB_PATH) as conn:
             cursor = conn.cursor()
@@ -97,14 +97,15 @@ def save_ticket(user_email: str, question: str, chat_history: str,
                 VALUES (?, ?, ?, ?, ?)
             ''', (user_email, question, chat_history, suggested_team, selected_team))
             conn.commit()
+            ticket_id = cursor.lastrowid
         logger.info(f"Ticket saved for user {user_email}.")
-        return True
+        return ticket_id
     except sqlite3.IntegrityError as e:
         logger.error(f"Ticket save failed for {user_email} (FK issue?): {e}", exc_info=True)
-        return False
+        return None
     except Exception as e:
         logger.error(f"Ticket save failed for {user_email}: {e}", exc_info=True)
-        return False
+        return None
 
 
 def save_feedback(user_email: str, question: str, answer: str, rating: str) -> bool:
@@ -203,7 +204,7 @@ def get_user_profile(email: str) -> Optional[Dict[str, Any]]:
 
 
 def _create_sample_users_if_not_exist():
-    from config import KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS  # For sample data
+    from .config import KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS  # For sample data
 
     # Get some role tags from config for realistic sample data
     sample_lead_role = list(ROLE_SPECIFIC_FOLDER_TAGS.values())[0] if ROLE_SPECIFIC_FOLDER_TAGS else "LEAD_ROLE"

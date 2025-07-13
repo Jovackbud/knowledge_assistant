@@ -1,20 +1,27 @@
-# Core framework
+# KNOWLEDGE_ASSISTANT/requirements.txt
+#
+# This file lists the direct dependencies of the project with pinned versions
+# to ensure reproducible builds.
 
-# Deep learning and legacy-Keras shim
+# --- Core Application Framework ---
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
 
-# Hugging Face Transformers ecosystem
+# --- AI & RAG Dependencies ---
+langchain==0.3.26
+langchain-community==0.3.27
+langchain-text-splitters==0.3.8
+langchain-milvus==0.2.1
+langchain-huggingface==0.3.0
+langchain-ollama==0.3.4
+sentence-transformers==5.0.0
+flashrank==0.2.10
+langsmith==0.4.5
 
-# LangChain integrations
-langchain-core==0.3.60                     # Core LangChain library :contentReference[oaicite:5]{index=5}
-fastapi
-uvicorn[standard]
+# --- Database & Vector Store Clients ---
+pymilvus==2.5.12
 
-# Vector database client
-pymilvus~=2.5.8
-
-# RPC & serialization dependencies
-requests~=2.31.0
-
-python-dotenv~=1.1.0
-langchain-community~=0.3.24
-langchain-text-splitters~=0.3.8
+# --- Document Loading & Utilities ---
+pypdf==5.7.0
+unstructured==0.18.5
+python-dotenv==1.1.1

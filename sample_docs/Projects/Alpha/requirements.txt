@@ -1,0 +1,24 @@
+Project Alpha - High-Level Requirements v1.2
+
+Project Goal: Develop a prototype system for analyzing sentiment in public policy documents related to AI ethics.
+
+Functional Requirements:
+FR-01: System shall allow uploading of documents in PDF and TXT format.
+FR-02: System shall identify key entities (organizations, people, policy names) within documents.
+FR-03: System shall classify sentiment towards identified entities (Positive, Negative, Neutral).
+FR-04: System shall provide a summary report outlining overall sentiment trends per document.
+FR-05: User interface shall allow filtering reports by entity and sentiment classification.
+
+Non-Functional Requirements:
+NFR-01: Processing time per document (avg. 10 pages) should be under 60 seconds.
+NFR-02: Sentiment analysis accuracy should meet baseline target (TBD based on model evaluation).
+NFR-03: System architecture should be modular to allow swapping sentiment models.
+
+Data Sources:
+- Initial dataset: Publicly available government reports and position papers (List to be curated).
+
+Team Members:
+- See Project Alpha Team Roster document.
+
+Current Phase:
+- Prototyping and Model Evaluation.

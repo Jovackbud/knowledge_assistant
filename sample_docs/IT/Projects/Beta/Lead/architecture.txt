@@ -1,0 +1,25 @@
+Project Beta - System Architecture Overview v0.5 (Lead Discussion Draft)
+
+CONFIDENTIAL - IT LEAD & PROJECT BETA LEAD ONLY
+
+Overall Approach: Microservices Architecture hosted on Internal Cloud Platform (ICP).
+
+Components:
+1.  **Frontend:** React SPA (Decision pending: Use existing UI kit?)
+2.  **Gateway API:** Kong (or similar) - Handles request routing, basic auth translation.
+3.  **Auth Service:** Python (Flask/FastAPI) - Integrates with company IdP (OAuth/OIDC), issues internal JWTs. Manages user session info potentially via Redis.
+4.  **User Profile Service:** Python (Flask/FastAPI) - CRUD operations for user data (persisted in PostgreSQL). Communicates via internal gRPC or REST.
+5.  **Document Processing Service (Future Phase):** TBD - Handles document uploads, analysis (Placeholder for now).
+6.  **Database:** PostgreSQL (Managed instance on ICP).
+7.  **Cache:** Redis (Managed instance on ICP) - For sessions, caching frequently accessed data.
+
+Key Considerations:
+- **Authentication Flow:** Frontend redirects to IdP -> IdP callback to Auth Service -> Auth Service validates, gets user info, creates internal session/JWT -> Frontend uses JWT for API Gateway requests -> Gateway verifies JWT, forwards requests with user context to backend services.
+- **Inter-Service Communication:** REST initially, consider gRPC for performance critical paths later.
+- **Scalability:** Design services to be independently scalable. Utilize ICP load balancers.
+- **Security:** Enforce HTTPS, input validation, secure JWT handling, principle of least privilege for service accounts. Database credentials managed via ICP Secrets Manager.
+
+Open Questions for Lead Review:
+- Final decision on Frontend framework/kit.
+- Need for message queue (RabbitMQ/Kafka) for async tasks (e.g., notifications)?
+- Detailed monitoring strategy (Prometheus/Grafana stack on ICP).
