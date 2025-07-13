@@ -77,7 +77,7 @@ services:
     ports:
       - "8000:8000" # For FastAPI
     volumes:
-      - ./src:/app 
+      - ./src:/app #remove when ready for production
       - ./data:/data
     env_file:
       - .env

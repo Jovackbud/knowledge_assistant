@@ -2,13 +2,15 @@ import os
 os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
 os.environ["KERAS_3"] = "0"
 
+from typing import List, Dict
+
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # --- Document Configuration ---
-DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs_phase_1")
+DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs")
 DOCS_FOLDER = Path(DOCS_FOLDER_NAME)
 ALLOWED_EXTENSIONS = [".txt", ".pdf", ".md"]
 DOCS_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -91,6 +93,7 @@ class AuthCredentials(BaseModel):
 class RAGRequest(BaseModel):
     email: str
     prompt: str
+    chat_history: List[Dict[str, str]] = []
 
 class SuggestTeamRequest(BaseModel):
     question_text: str
