@@ -1,306 +1,257 @@
-from fastapi import FastAPI, HTTPException, Header
+import os
+import json
+import logging
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any
-from fastapi.responses import FileResponse
+from starlette.status import HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
+
+# --- Local Imports ---
+# Services and Utilities
 from .auth_service import fetch_user_access_profile, update_user_permissions_by_admin, remove_user_by_admin
-from .config import AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest, TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS
 from .rag_processor import RAGService
 from .ticket_system import suggest_ticket_team, create_ticket
 from .feedback_system import record_feedback
-from .database_utils import init_all_databases, _create_sample_users_if_not_exist # Added
-import logging
-from fastapi.responses import StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from pathlib import Path
-import json
-import os
-app = FastAPI()
-rag_service: RAGService | None = None
+from .database_utils import init_all_databases, _create_sample_users_if_not_exist
+from .security import create_access_token, get_current_active_user, AuthException
 
+# Configuration and Models
+from .config import (
+    AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest,
+    TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS
+)
+
+# --- App Setup ---
+app = FastAPI(title="Company Knowledge Assistant")
+
+# Add this middleware block
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins, fine for local dev. For production, restrict to your frontend's domain.
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers, including our 'Authorization' header.
+)
+
+rag_service: Optional[RAGService] = None
+# ... rest of your file
+rag_service: Optional[RAGService] = None
+
+# --- Path and Logging Configuration ---
 SRC_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SRC_DIR.parent
 STATIC_DIR = PROJECT_ROOT / "static"
 
-# Configure basic logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-logger.info(f"Attempting to mount static directory at: {str(STATIC_DIR)}")
-logger.info(f"Does STATIC_DIR exist? {STATIC_DIR.exists()}")
-logger.info(f"Is STATIC_DIR a directory? {STATIC_DIR.is_dir()}")
+
+# --- FastAPI Dependencies for Security ---
+
+def get_current_user_profile(token: str = Header(None, alias="Authorization")) -> Dict[str, Any]:
+    """
+    FastAPI dependency to get the current user's profile from a bearer token.
+    """
+    if token is None or not token.lower().startswith("bearer "):
+        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Not authenticated: Missing or invalid token format.")
+    
+    token_value = token.split(" ")[1]
+    try:
+        user_profile = get_current_active_user(token=token_value)
+        return user_profile
+    except AuthException as e:
+        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=e.detail, headers={"WWW-Authenticate": "Bearer"})
+
+def get_current_admin_user(current_user: Dict[str, Any] = Depends(get_current_user_profile)) -> Dict[str, Any]:
+    """
+    FastAPI dependency that ensures the current user is an admin.
+    Raises a 403 Forbidden error if the user is not an admin.
+    """
+    user_level = current_user.get("user_hierarchy_level")
+    if user_level != ADMIN_HIERARCHY_LEVEL:
+        logger.warning(
+            f"Admin access denied for user '{current_user.get('user_email')}'. "
+            f"Level: {user_level}, Required: {ADMIN_HIERARCHY_LEVEL}"
+        )
+        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Forbidden: User does not have admin privileges.")
+    
+    logger.info(f"Admin access granted for user '{current_user.get('user_email')}'.")
+    return current_user
+
+# --- App Lifecycle Events ---
 
 @app.on_event("startup")
 async def startup_event():
     global rag_service
-    logger.info("Starting database initialization...")
+    logger.info("--- Application Startup ---")
     try:
         init_all_databases()
-        logger.info("All databases initialized successfully.")
         _create_sample_users_if_not_exist()
-        logger.info("Sample user creation check completed.")
-
-        logger.info ("Initializing RAG Service...")
         rag_service = RAGService.from_config()
-        logger.info("RAG Service initialized successfully.")
-
+        logger.info("--- Startup Complete ---")
     except Exception as e:
         logger.error(f"Application startup failed: {e}", exc_info=True)
         raise
 
+# --- Static Files and Root Endpoint ---
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 @app.get("/")
 async def root():
     html_file_path = STATIC_DIR / "index.html"
-    logger.info(f"Serving root HTML from: {str(html_file_path)}")
     if html_file_path.exists():
         return FileResponse(str(html_file_path))
-    else:
-        logger.error(f"Root index.html not found at {str(html_file_path)}")
-        return HTTPException(status_code=404, detail="index.html not found")
+    raise HTTPException(status_code=404, detail="index.html not found")
+
+# --- Authentication Endpoint ---
 
 @app.post("/auth/login")
 async def login(credentials: AuthCredentials):
+    """
+    Handles user login. If the user exists, returns a JWT token and their profile.
+    """
     try:
         user_profile = fetch_user_access_profile(credentials.email)
-        if user_profile:
-            return user_profile
-        else:
-            raise HTTPException(status_code=404, detail="User not found")
-    except Exception as e:
-        # Log the exception e if a logger is configured
-        raise HTTPException(status_code=500, detail="Internal server error during login")
-
-# In src/main.py, add this import at the top
-from fastapi.responses import StreamingResponse
-
-# ...
-
-@app.post("/rag/chat")
-async def rag_chat(request: RAGRequest):
-    if rag_service is None:
-        raise HTTPException(status_code=503, detail="RAG Service is not available")
-    
-    try:
-        user_profile = fetch_user_access_profile(request.email)
         if not user_profile:
-            raise HTTPException(status_code=404, detail="User profile not found")
+            raise HTTPException(status_code=404, detail="User not found or credentials incorrect.")
 
-        # Get the new chain and the separate retriever
-        chain, retriever = rag_service.get_rag_chain(user_profile, request.chat_history)
+        access_token = create_access_token(data={"sub": user_profile["user_email"]})
         
-        async def stream_generator():
-            try:
-                # 1. Stream the answer token by token
-                full_answer = ""
-                async for chunk in chain.astream({"question": request.prompt}):
-                    full_answer += chunk
-                    data_to_send = {"answer_chunk": chunk}
-                    yield f"data: {json.dumps(data_to_send)}\n\n"
-                
-                # 2. After the answer is complete, get the sources
-                retrieved_docs = retriever.invoke(request.prompt)
-                sources = [doc.metadata.get("source", "Unknown") for doc in retrieved_docs]
-                data_to_send = {"sources": sources}
-                yield f"data: {json.dumps(data_to_send)}\n\n"
-
-            except Exception as e:
-                logger.error(f"Error during RAG stream: {e}", exc_info=True)
-                error_data = {"error": "An error occurred during generation."}
-                yield f"data: {json.dumps(error_data)}\n\n"
-
-        return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_profile": user_profile
+        }
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        logger.error(f"Error in RAG service: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error in RAG service: {str(e)}")
+        logger.error(f"Internal server error during login for {credentials.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during login.")
+
+# --- Core RAG Endpoint ---
+
+@app.post("/rag/chat")
+async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
+    """
+    Handles a chat request. User identity is determined by the auth token.
+    """
+    if rag_service is None:
+        raise HTTPException(status_code=503, detail="RAG Service is not available.")
+    
+    user_email = current_user.get("user_email")
+    logger.info(f"Chat request received from authenticated user: {user_email}")
+
+    try:
+        chain = rag_service.get_rag_chain(current_user, request.chat_history)
+
+        async def stream_generator():
+            try:
+                final_sources = []
+                async for chunk in chain.astream({"question": request.prompt}):
+                    if "answer" in chunk:
+                        yield f"data: {json.dumps({'answer_chunk': chunk['answer']})}\n\n"
+                    if "context" in chunk:
+                        final_sources = [doc.metadata.get("source", "Unknown") for doc in chunk["context"]]
+
+                if final_sources:
+                    yield f"data: {json.dumps({'sources': list(set(final_sources))})}\n\n"
+            except Exception as e:
+                logger.error(f"Error during RAG stream for user {user_email}: {e}", exc_info=True)
+                yield f"data: {json.dumps({'error': 'An error occurred during generation.'})}\n\n"
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"Error in RAG service for user {user_email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing chat request.")
 
 # --- Ticket System Endpoints ---
 
 @app.post("/tickets/suggest_team")
-async def suggest_team_endpoint(request: SuggestTeamRequest):
-    try:
-        suggested_team = suggest_ticket_team(request.question_text)
-        return {"suggested_team": suggested_team, "available_teams": TICKET_TEAMS}
-    except Exception as e:
-        # Log the exception e
-        raise HTTPException(status_code=500, detail=f"Error suggesting ticket team: {str(e)}")
+async def suggest_team_endpoint(request: SuggestTeamRequest, _: Dict[str, Any] = Depends(get_current_user_profile)):
+    """Suggests a team for a ticket. Requires user to be authenticated."""
+    return {"suggested_team": suggest_ticket_team(request.question_text), "available_teams": TICKET_TEAMS}
 
 @app.post("/tickets/create")
-async def create_ticket_endpoint(request: CreateTicketRequest):
-    try:
-        # Basic validation for selected_team
-        if request.selected_team not in TICKET_TEAMS:
-            raise HTTPException(status_code=400, detail=f"Invalid team selected. Please choose from: {', '.join(TICKET_TEAMS)}")
+async def create_ticket_endpoint(request: CreateTicketRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
+    """Creates a support ticket. User is identified by token."""
+    if request.selected_team not in TICKET_TEAMS:
+        raise HTTPException(status_code=400, detail=f"Invalid team selected.")
 
-        ticket_id = create_ticket(
-            user_email=request.email,
-            question=request.question_text,
-            chat_history=request.chat_history_json,
-            final_selected_team=request.selected_team
-        )
-        if ticket_id is not None:
-            return {"message": "Ticket created successfully", "ticket_id": ticket_id}
-        else:
-            # This case might indicate an issue within create_ticket that didn't raise an exception
-            raise HTTPException(status_code=500, detail="Ticket creation failed in the database.")
-    except HTTPException as http_exc: # Re-raise HTTPException
-        raise http_exc
-    except Exception as e:
-        logger.error(f"Error creating ticket: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error creating ticket: {str(e)}")
+    ticket_id = create_ticket(
+        user_email=current_user["user_email"],
+        question=request.question_text,
+        chat_history=request.chat_history_json,
+        final_selected_team=request.selected_team
+    )
+    if ticket_id is not None:
+        return {"message": "Ticket created successfully", "ticket_id": ticket_id}
+    raise HTTPException(status_code=500, detail="Ticket creation failed in the database.")
 
 # --- Feedback System Endpoint ---
 
 @app.post("/feedback/record")
-async def record_feedback_endpoint(request: FeedbackRequest):
-    try:
-        record_feedback(
-            user_email=request.email,
-            question=request.question,
-            answer=request.answer,
-            rating=request.feedback_type
-        )
+async def record_feedback_endpoint(request: FeedbackRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
+    """Records feedback. User is identified by token."""
+    success = record_feedback(
+        user_email=current_user["user_email"],
+        question=request.question,
+        answer=request.answer,
+        rating=request.feedback_type
+    )
+    if success:
         return {"message": "Feedback recorded successfully"}
-    except Exception as e:
-        # Log the exception e
-        raise HTTPException(status_code=500, detail=f"Error recording feedback: {str(e)}")
+    raise HTTPException(status_code=500, detail="Error recording feedback.")
 
-# --- Admin System Endpoints ---
-@app.get("/admin/config_tags")
-async def get_config_tags():
-    # This endpoint provides necessary config data to the frontend UI
-    return {
-        "known_department_tags": KNOWN_DEPARTMENT_TAGS
-        # In the future, you could add known project tags here too
-    }
+# --- Admin Endpoints (Secured by get_current_admin_user) ---
 
 class UserPermissionsRequest(BaseModel):
     target_email: str
-    permissions: Dict[str, Any] # e.g., {"user_hierarchy_level": 2, "departments": ["IT"]}
+    permissions: Dict[str, Any]
 
-async def is_admin(user_email: str) -> bool:
-    """
-    Checks if the given user_email corresponds to an admin.
-    An admin is defined as a user with user_hierarchy_level == ADMIN_HIERARCHY_LEVEL.
-    """
-    if not user_email:
-        return False
-    # fetch_user_access_profile is synchronous. As this `is_admin` function is async,
-    # ideally, blocking IO like this would be run in a thread pool.
-    # e.g., from fastapi.concurrency import run_in_threadpool
-    # admin_profile = await run_in_threadpool(fetch_user_access_profile, user_email)
-    # However, to maintain consistency with the /auth/login endpoint's direct call,
-    # which is also an async def calling the synchronous fetch_user_access_profile,
-    # we will call it directly here as well.
-    admin_profile = fetch_user_access_profile(user_email)
-    if admin_profile and admin_profile.get("user_hierarchy_level") == ADMIN_HIERARCHY_LEVEL:
-        logger.info(f"Admin check: User '{user_email}' IS an admin (Level {ADMIN_HIERARCHY_LEVEL}).")
-        return True
-    
-    current_level = admin_profile.get("user_hierarchy_level") if admin_profile else "N/A"
-    logger.warning(f"Admin check: User '{user_email}' IS NOT an admin (Hierarchy Level: {current_level}, Required: {ADMIN_HIERARCHY_LEVEL}). Profile: {admin_profile}")
-    return False
-
-@app.post("/admin/user_permissions")
-async def admin_update_user_permissions(
-    payload: UserPermissionsRequest,
-    x_user_email: str = Header(None, alias="X-User-Email") # Extract admin's email from header
-):
-    """
-    Admin endpoint to update user permissions.
-    The admin's email must be provided in the 'X-User-Email' header.
-    """
-    logger.info(f"Received request to update permissions for '{payload.target_email}' by user '{x_user_email}'.")
-
-    if not x_user_email:
-        logger.warning("Admin endpoint call missing X-User-Email header.")
-        raise HTTPException(status_code=400, detail="X-User-Email header is required.")
-
-    # Verify if the requesting user is an admin
-    if not await is_admin(x_user_email):
-        logger.warning(f"Unauthorized attempt to update permissions by non-admin user '{x_user_email}'.")
-        raise HTTPException(status_code=403, detail="Forbidden: Requesting user is not an admin.")
-
-    try:
-        # Call the auth_service function to update permissions
-        # This function is currently a placeholder
-        update_result = update_user_permissions_by_admin(
-            target_email=payload.target_email,
-            new_permissions=payload.permissions
-        )
-        logger.info(f"Permissions update call for '{payload.target_email}' by admin '{x_user_email}' completed. Result: {update_result}")
-        return update_result
-    except Exception as e:
-        logger.error(f"Error during admin update of permissions for '{payload.target_email}' by '{x_user_email}': {e}", exc_info=True)
-        # Check if it's an HTTPException from a deeper call (like user not found if implemented in auth_service)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
-    
-
-
-class UserRemovalRequest(BaseModel): # Optional: or just take email from path
+class UserRemovalRequest(BaseModel):
     target_email: str
 
-@app.post("/admin/remove_user") # Or use @app.delete("/admin/user/{target_email_in_path}")
-async def admin_remove_user(
-    payload: UserRemovalRequest, # If using POST with payload
-    # target_email_in_path: str, # If using DELETE with path parameter
-    x_user_email: str = Header(None, alias="X-User-Email")
-):
-    logger.info(f"Received request to remove user '{payload.target_email}' by admin '{x_user_email}'.")
-    # target_email_to_remove = payload.target_email # if using POST payload
+@app.get("/admin/config_tags")
+async def get_config_tags(_: Dict[str, Any] = Depends(get_current_admin_user)):
+    """Provides config data to the admin UI."""
+    return {"known_department_tags": KNOWN_DEPARTMENT_TAGS}
 
-    if not x_user_email:
-        raise HTTPException(status_code=400, detail="X-User-Email header is required.")
-
-    if not await is_admin(x_user_email):
-        raise HTTPException(status_code=403, detail="Forbidden: Requesting user is not an admin.")
-
-    try:
-        # removal_result = remove_user_by_admin(target_email_to_remove) # if using POST payload
-        removal_result = remove_user_by_admin(payload.target_email) # if using POST payload
-        
-        if "error" in removal_result:
-             # Determine appropriate status code, e.g. 404 if user not found, 500 otherwise
-            status_code = 404 if "not exist" in removal_result["error"] or "not found" in removal_result["error"] else 500
-            raise HTTPException(status_code=status_code, detail=removal_result["error"])
-        
-        return removal_result
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        logger.error(f"Error during admin removal of user '{payload.target_email}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
-    
 @app.get("/admin/view_user_permissions/{target_email}")
-async def admin_view_user_permissions(
-    target_email: str,
-    x_user_email: str = Header(None, alias="X-User-Email")
-):
-    logger.info(f"Admin '{x_user_email}' attempting to view permissions for user '{target_email}'.")
+async def admin_view_user_permissions(target_email: str, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+    """Admin views a specific user's permissions."""
+    logger.info(f"Admin '{admin_user['user_email']}' viewing permissions for '{target_email}'.")
+    user_profile = fetch_user_access_profile(target_email)
+    if not user_profile:
+        raise HTTPException(status_code=404, detail=f"User profile for '{target_email}' not found.")
+    return user_profile
 
-    if not x_user_email:
-        raise HTTPException(status_code=400, detail="X-User-Email header is required.")
+@app.post("/admin/user_permissions")
+async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+    """Admin creates or updates a user's permissions."""
+    logger.info(f"Admin '{admin_user['user_email']}' updating permissions for '{payload.target_email}'.")
+    update_result = update_user_permissions_by_admin(
+        target_email=payload.target_email,
+        new_permissions=payload.permissions
+    )
+    if "error" in update_result:
+        raise HTTPException(status_code=500, detail=update_result["error"])
+    return update_result
 
-    if not await is_admin(x_user_email):
-        logger.warning(f"Unauthorized attempt to view permissions by non-admin user '{x_user_email}' for target '{target_email}'.")
-        raise HTTPException(status_code=403, detail="Forbidden: Requesting user is not an admin.")
-
-    if not target_email or "@" not in target_email:
-        raise HTTPException(status_code=400, detail="Invalid target_email provided.")
-
-    try:
-        # fetch_user_access_profile already handles logging if user is not found
-        user_profile = fetch_user_access_profile(target_email)
-        if not user_profile:
-            raise HTTPException(status_code=404, detail=f"User profile for '{target_email}' not found.")
+@app.post("/admin/remove_user")
+async def admin_remove_user(payload: UserRemovalRequest, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+    """Admin removes a user from the system."""
+    target_email = payload.target_email
+    if target_email == admin_user['user_email']:
+        raise HTTPException(status_code=400, detail="Admins cannot remove themselves.")
         
-        logger.info(f"Successfully fetched profile for '{target_email}' for admin viewing by '{x_user_email}'.")
-        return user_profile # Returns the full profile
-    except HTTPException as http_exc:
-        raise http_exc # Re-raise known HTTP exceptions
-    except Exception as e:
-        logger.error(f"Error during admin viewing of permissions for '{target_email}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An internal error occurred while fetching user permissions: {str(e)}")
+    logger.info(f"Admin '{admin_user['user_email']}' removing user '{target_email}'.")
+    removal_result = remove_user_by_admin(target_email)
+    if "error" in removal_result:
+        status_code = 404 if "not found" in removal_result["error"] else 500
+        raise HTTPException(status_code=status_code, detail=removal_result["error"])
+    return removal_result

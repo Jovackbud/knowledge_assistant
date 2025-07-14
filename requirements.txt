@@ -25,3 +25,10 @@ pymilvus==2.5.12
 pypdf==5.7.0
 unstructured==0.18.5
 python-dotenv==1.1.1
+
+# --- Authentication ---
+python-jose[cryptography]
+passlib[bcrypt]
+
+# --- ticket suggestion --
+scikit-learn
