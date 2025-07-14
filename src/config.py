@@ -81,7 +81,12 @@ SYNC_STATE_FILE = DB_PARENT_DIR / "sync_state.json"
 
 # --- Ticket System ---
 TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]
-TICKET_KEYWORD_MAP = {
+TICKET_TEAM_DESCRIPTIONS = {
+    "IT": "Issues related to company laptops, computers, software, installation, network connectivity, Wi-Fi, internet access, servers, VPNs, or printers.",
+    "HR": "Questions about payroll, paychecks, compensation, vacation and leave policies, company benefits, employee onboarding, employment contracts, or company policy.",
+    "Helpdesk": "Problems with account access, password resets, being locked out of systems, login errors, or general access permissions.",
+    "Legal": "Matters concerning legal compliance, non-disclosure agreements (NDAs), contracts with third parties, data privacy, or official company statements."
+    # "General" will be the fallback and does not need a description.
 }
 
 # --- API Models ---
@@ -91,7 +96,6 @@ class AuthCredentials(BaseModel):
     email: str
 
 class RAGRequest(BaseModel):
-    email: str
     prompt: str
     chat_history: List[Dict[str, str]] = []
 
@@ -99,32 +103,14 @@ class SuggestTeamRequest(BaseModel):
     question_text: str
 
 class CreateTicketRequest(BaseModel):
-    email: str
     question_text: str
     chat_history_json: str # Or use a more structured model like List[Dict[str, str]]
     selected_team: str
 
 class FeedbackRequest(BaseModel):
-    email: str
     question: str
     answer: str
     feedback_type: str # e.g., "👍" or "👎"
-
-# --- User Profile Defaults ---
-# (These could be expanded and moved to a more specific user management config if needed)
-DEFAULT_USER_PROFILE = {
-    "user_id": "default_user", # Should be unique per user
-    "email": "user@example.com",
-    "department_tags": ["GENERAL"],
-    "project_tags": ["GENERAL"],
-    "role_tags": ["MEMBER_ROLE"],
-    "hierarchy_level": 0,
-    "custom_permissions": [], # e.g., ["view_sensitive_reports"]
-    "HR": ["payroll", "leave", "benefits", "employee"], # Generic HR keywords
-    "IT": ["password", "laptop", "network", "software"],
-    "Helpdesk": ["login", "account", "issue", "access"],
-    "Legal": ["compliance", "contract", "policy"],
-}
 
 
 if __name__ == "__main__":

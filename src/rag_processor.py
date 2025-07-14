@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import json
 from pymilvus import utility, connections, Collection
 from operator import itemgetter
@@ -6,13 +7,16 @@ from typing import Dict, Any, List, Optional
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
+# from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from flashrank.Ranker import RerankRequest
+from flashrank import Ranker 
 # --------------------------------
 
 from langchain_milvus import Milvus
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM as Ollama
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.retrievers import BaseRetriever
 from langchain.memory import ConversationBufferMemory
@@ -41,12 +45,25 @@ class RAGService:
         self.embeddings = embeddings
         self.vector_store = vector_store
         self.llm = llm
+        # --- NEW PROMPT LOADING LOGIC ---
+        try:
+            # Define the path to the prompts directory relative to this file
+            prompts_dir = Path(__file__).resolve().parent.parent / "prompts"
+            system_prompt_path = prompts_dir / "rag_system_prompt.md"
+            
+            with open(system_prompt_path, "r", encoding="utf-8") as f:
+                system_prompt_content = f.read()
+            
+            logger.info(f"Successfully loaded system prompt from {system_prompt_path}")
+
+        except FileNotFoundError:
+            logger.error(f"FATAL: System prompt file not found at {system_prompt_path}. Please ensure it exists.")
+            # In a real production app, you might have a fallback or raise an exception to stop startup.
+            # For now, we'll log an error and the app will likely fail on the next line.
+            raise
+
         self.prompt_template = ChatPromptTemplate.from_messages([
-            ("system",
-             "You are an internal Knowledge Assistant for the organization called African Institute for Artificial Intelligence (AI4AI)."
-             "Answer the question based *only* on the provided context. "
-             "If the context is empty or doesn't contain the answer, state that you don't have sufficient information from the documents.\n\n"
-             "Context:\n{context}"),
+            ("system", system_prompt_content),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{question}")
         ])
@@ -118,24 +135,70 @@ class RAGService:
             logger.error(f"RAG: Milvus vector store init failed for '{collection_name}': {e}", exc_info=True)
             raise
     
-    def get_rag_chain(self, user_profile: Optional[Dict[str, Any]], chat_history: List[Dict[str, str]]):
+    # In src/rag_processor.py
 
-        # 1. Create the base retriever and the reranking compressor
+    def get_rag_chain(self, user_profile: Optional[Dict[str, Any]], chat_history: List[Dict[str, str]]):
+        # 1. Initialize the reranker model. This is lightweight.
+        # You can specify other models, but this default is fast and effective.
+        ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank_cache")
+
+        # 2. Define the base retriever that respects user permissions
         base_retriever = self.vector_store.as_retriever(
             search_kwargs={"param": {"expr": self._build_filter_expression(user_profile)}, "k": 10}
         )
-        compressor = FlashrankRerank(top_n=3)
-        compression_retriever = ContextualCompressionRetriever(
-            base_compressor=compressor, base_retriever=base_retriever
-        )
 
-        # 2. Re-insert the missing format_docs helper function
+        # 3. Define a custom function to perform reranking and filtering
+        def rerank_and_filter_documents(inputs: Dict[str, Any]) -> List[Any]:
+            """
+            Takes retrieved documents and reranks them, filtering out those below a threshold.
+            """
+            question = inputs["question"]
+            retrieved_docs = inputs["docs"]
+            
+            if not retrieved_docs:
+                return []
+
+            # Prepare documents for flashrank
+            passages = [{
+                "id": i,
+                "text": doc.page_content,
+                "meta": {"source": doc.metadata.get("source", "Unknown"), **doc.metadata} # Pass along all metadata
+            } for i, doc in enumerate(retrieved_docs)]
+
+            # Perform the reranking
+            request = RerankRequest(query=question, passages=passages)
+            reranked_results = ranker.rerank(request)
+
+            # --- THIS IS THE CRITICAL THRESHOLDING STEP ---
+            # Set a threshold for relevance. Adjust this value based on testing.
+            # 0.5 is a good starting point. Higher values are more strict.
+            score_threshold = 0.2
+            final_docs_data = [r for r in reranked_results if r.get("score", 0) >= score_threshold]
+
+            # Limit to top N results *after* thresholding to avoid overwhelming the LLM
+            top_n = 3
+            final_docs_data = final_docs_data[:top_n]
+
+            # Convert back to LangChain Document objects
+            final_docs = [
+                type(retrieved_docs[0])(page_content=d["text"], metadata=d["meta"])
+                for d in final_docs_data
+            ]
+            
+            logger.info(f"Reranking complete. Initial: {len(retrieved_docs)} docs, Final: {len(final_docs)} docs after thresholding.")
+            return final_docs
+
+        # 4. Define a helper function to format documents for the LLM
         def format_docs(docs: List[Any]) -> str:
             if not docs:
-                return "No relevant documents found based on your query and access rights."
-            return "\n\n".join(doc.page_content for doc in docs if hasattr(doc, 'page_content'))
+                return "No relevant documents were found based on your query and access rights after filtering for relevance."
+            formatted_docs = [
+                f"Content from [Source: {doc.metadata.get('source', 'Unknown')}]:\n{doc.page_content}" for doc in docs if hasattr(doc, 'page_content')
+                ]
+            return "\n\n---\n\n".join(formatted_docs)
         
-        # 3. Create the memory object from the chat history
+
+        # 5. Create the memory object from the chat history
         message_history = InMemoryChatMessageHistory()
         for msg in chat_history:
             if msg.get("role") == "user":
@@ -149,20 +212,36 @@ class RAGService:
             return_messages=True
         )
 
-        # 4. Construct the final RAG chain
-        rag_chain = (
-            RunnablePassthrough.assign(
-                context=(lambda x: format_docs(compression_retriever.invoke(x["question"])))
-            ).assign(
-                chat_history=(lambda x: memory.load_memory_variables(x).get("chat_history", []))
-            )
+        # 6. Construct the new, more robust RAG chain
+        
+        # This runnable takes the question, passes it to the base retriever,
+        # and then passes both the question and the retrieved docs to our custom reranker.
+        retrieval_and_rerank_chain = {
+            "docs": itemgetter("question") | base_retriever,
+            "question": itemgetter("question")
+        } | RunnableLambda(rerank_and_filter_documents)
+
+        # This part of the chain now receives only the high-relevance, filtered documents
+        contextualize_chain = {
+            "context": retrieval_and_rerank_chain,
+            "question": itemgetter("question"),
+            "chat_history": lambda x: memory.load_memory_variables(x).get("chat_history", [])
+        }
+        
+        answer_chain = (
+            {
+                "context": lambda x: format_docs(x["context"]),
+                "question": itemgetter("question"),
+                "chat_history": itemgetter("chat_history")
+            }
             | self.prompt_template
             | self.llm
             | StrOutputParser()
         )
 
-        # We return the retriever and the chain separately
-        return rag_chain, compression_retriever
+        final_chain = contextualize_chain | RunnablePassthrough.assign(answer=answer_chain)
+
+        return final_chain
 
     def _build_filter_expression(self, profile: Dict[str, Any]) -> str:
         user_level = profile.get("user_hierarchy_level", -1)
