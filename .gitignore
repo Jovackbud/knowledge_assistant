@@ -7,7 +7,7 @@ node_modules/
 
 # Virtual environments
 .venv/
-.env/
+.env
 
 # VS Code
 .vscode/
