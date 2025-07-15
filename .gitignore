@@ -17,8 +17,6 @@ node_modules/
 
 .idea/
 
-milvus/
 database/
-sample_docs_phase_1
-knowledge_assistant.pdf
-knowledge_assistant.docx
+milvus/
+test_reranker.py
