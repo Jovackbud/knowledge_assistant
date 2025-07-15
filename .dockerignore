@@ -1,0 +1,27 @@
+# .dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# VS Code
+.vscode/
+
+# Logs & Databases (these should not be in the image)
+*.log
+database/
+milvus/
+
+# Local test files
+test_reranker.py
+
+# Docker specific
+Dockerfile
+docker-compose.yml
+render.yaml
