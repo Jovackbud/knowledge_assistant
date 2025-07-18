@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Optional, List, Any
 from .config import (
     TICKET_DB_PATH, FEEDBACK_DB_PATH, AUTH_DB_PATH,
-    DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL, DEFAULT_DEPARTMENT_TAG
+    DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL
 )
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def init_auth_db():
     - contextual_roles (JSON dict: {"context_tag": ["ROLE_1", "ROLE_2"]})
       Context_tag can be a project_tag or a department_tag.
     """
-    with sqlite3.connect(AUTH_DB_PATH) as conn:
+    with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS UserAccessProfile (
@@ -47,7 +47,7 @@ def init_auth_db():
 
 
 def init_ticket_db():
-    with sqlite3.connect(TICKET_DB_PATH) as conn:
+    with sqlite3.connect(TICKET_DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
         cursor.execute('''
@@ -68,7 +68,7 @@ def init_ticket_db():
 
 
 def init_feedback_db():
-    with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
+    with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
         cursor.execute('''
@@ -89,7 +89,7 @@ def init_feedback_db():
 def save_ticket(user_email: str, question: str, chat_history: str,
                 suggested_team: str, selected_team: str) -> Optional[int]:
     try:
-        with sqlite3.connect(TICKET_DB_PATH) as conn:
+        with sqlite3.connect(TICKET_DB_PATH, timeout=10) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO tickets
@@ -110,7 +110,7 @@ def save_ticket(user_email: str, question: str, chat_history: str,
 
 def save_feedback(user_email: str, question: str, answer: str, rating: str) -> bool:
     try:
-        with sqlite3.connect(FEEDBACK_DB_PATH) as conn:
+        with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO feedback (user_email, question, answer, rating)
@@ -138,7 +138,7 @@ def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool
         projects_membership_json = json.dumps(projects_membership_list)
         contextual_roles_json = json.dumps(contextual_roles_dict)
 
-        with sqlite3.connect(AUTH_DB_PATH) as conn:
+        with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT OR REPLACE INTO UserAccessProfile
@@ -161,7 +161,7 @@ def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool
 
 def get_user_profile(email: str) -> Optional[Dict[str, Any]]:
     try:
-        with sqlite3.connect(AUTH_DB_PATH) as conn:
+        with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM UserAccessProfile WHERE user_email = ?", (email,))
@@ -204,36 +204,32 @@ def get_user_profile(email: str) -> Optional[Dict[str, Any]]:
 
 
 def _create_sample_users_if_not_exist():
-    from .config import KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS  # For sample data
-
-    # Get some role tags from config for realistic sample data
-    sample_lead_role = list(ROLE_SPECIFIC_FOLDER_TAGS.values())[0] if ROLE_SPECIFIC_FOLDER_TAGS else "LEAD_ROLE"
-    sample_admin_role = list(ROLE_SPECIFIC_FOLDER_TAGS.values())[1] if len(
-        ROLE_SPECIFIC_FOLDER_TAGS) > 1 else "ADMIN_ROLE"
-
+    """
+    Creates a set of sample users with clear, hardcoded data if they do not exist.
+    This hardcoded approach is more readable and less error-prone than dynamic generation.
+    """
     sample_users = {
         "staff.hr@example.com": {
-            "user_hierarchy_level": 0,  # Staff
-            "departments": [KNOWN_DEPARTMENT_TAGS[0] if KNOWN_DEPARTMENT_TAGS else DEFAULT_DEPARTMENT_TAG],
+            "user_hierarchy_level": 0,
+            "departments": ["HR"],
             "projects_membership": [],
             "contextual_roles": {}
         },
         "lead.it.project_alpha@example.com": {
-            "user_hierarchy_level": 1,  # Manager level for a lead
-            "departments": [KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else DEFAULT_DEPARTMENT_TAG],
+            "user_hierarchy_level": 2,
+            "departments": ["IT"],
             "projects_membership": ["PROJECT_ALPHA", "PROJECT_INTERNAL_INFRA"],
             "contextual_roles": {
-                "PROJECT_ALPHA": [sample_lead_role],
-                (KNOWN_DEPARTMENT_TAGS[1] if len(KNOWN_DEPARTMENT_TAGS) > 1 else DEFAULT_DEPARTMENT_TAG): [sample_admin_role]
+                "PROJECT_ALPHA": ["LEAD"],
+                "IT": ["ADMIN_ROLE"]
             }
         },
         "exec.finance@example.com": {
-            "user_hierarchy_level": 2,  # Executive
-            "departments": [KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG],
+            "user_hierarchy_level": 2,
+            "departments": ["FINANCE"],
             "projects_membership": ["PROJECT_BUDGET_Q4"],
             "contextual_roles": {
-                (KNOWN_DEPARTMENT_TAGS[2] if len(KNOWN_DEPARTMENT_TAGS) > 2 else DEFAULT_DEPARTMENT_TAG): [
-                    "DEPARTMENT_HEAD_ROLE"]
+                "FINANCE": ["DEPARTMENT_HEAD"]
             }
         },
         "general.user@example.com": {
@@ -242,22 +238,25 @@ def _create_sample_users_if_not_exist():
             "projects_membership": [],
             "contextual_roles": {}
         },
-         "admin.user@example.com": {  # New admin user
-            "user_hierarchy_level": 3,
-            "departments": [KNOWN_DEPARTMENT_TAGS[-1]], # Or specific admin department
-            "projects_membership": ["PROJECT_BETA"],
+        "admin.user@example.com": {
+            "user_hierarchy_level": 3, # Matches ADMIN_HIERARCHY_LEVEL
+            "departments": ["IT", "HR", "FINANCE", "LEGAL", "MARKETING", "OPERATIONS", "SALES"], # Full access
+            "projects_membership": [],
             "contextual_roles": {}
         }
     }
+    
+    logger.info("Checking for and creating sample users if they don't exist...")
     for email, data in sample_users.items():
         if not get_user_profile(email):
+            # We no longer need to import from config here, simplifying dependencies
             add_or_update_user_profile(email, data)
-            logger.info(f"Created sample user: {email}")  # Data not logged here to avoid clutter
-
+            logger.info(f"Created sample user: {email}")
 
 def delete_user_profile(email: str) -> bool:
+    """Deletes a user profile and all associated data via cascading deletes."""
     try:
-        with sqlite3.connect(AUTH_DB_PATH) as conn:
+        with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
             cursor = conn.cursor()
             # The ON DELETE CASCADE for foreign keys in tickets and feedback tables
             # should handle associated data deletion automatically.
@@ -268,7 +267,7 @@ def delete_user_profile(email: str) -> bool:
                 return True
             else:
                 logger.warning(f"Attempted to delete profile for {email}, but user not found.")
-                return False # Or treat as success if idempotent deletion is desired
+                return False # Treat as success if idempotent deletion is desired
     except Exception as e:
         logger.error(f"Profile deletion failed for {email}: {e}", exc_info=True)
         return False

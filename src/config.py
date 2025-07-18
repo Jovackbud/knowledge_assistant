@@ -27,6 +27,9 @@ KNOWN_DEPARTMENT_TAGS = [
     "LEGAL", "MARKETING", "OPERATIONS", "SALES"
 ]
 
+# --- Vector Store Configuration ---
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant")
+
 # Mapping for role-specific folder names to role tags. Folder names are matched case-insensitively.
 # Value is the role tag stored in metadata.
 ROLE_SPECIFIC_FOLDER_TAGS = {
@@ -51,23 +54,13 @@ HIERARCHY_LEVELS_CONFIG = {
 }
 ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
 
-# Path structure examples:
-# DOCS_FOLDER/PROJECT_X/file.pdf
-# DOCS_FOLDER/PROJECT_X/lead_docs/plan.pdf
-# DOCS_FOLDER/HR/PROJECT_Y/STAFF_0_GUIDELINES/onboarding.pdf
-# DOCS_FOLDER/IT/PROJECT_Z/manager_exclusive/MANAGER_1_REPORTS/status.pdf
-
-# --- Milvus Configuration ---
-MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
-MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "adv_rbac_kb_v1") # New name for new structure
-VECTOR_DIMENSION = 384
-
 # --- Text Processing ---
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-LLM_MODEL = os.getenv("LLM_MODEL", "gemma3:1b")
+RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
+RERANKER_SCORE_THRESHOLD = 0.2
+LLM_GENERATION_MODEL = "gemini-2.5-flash"
 
 # --- Database Paths ---
 DB_PARENT_DIR_NAME = "database"
@@ -114,4 +107,9 @@ class FeedbackRequest(BaseModel):
 
 
 if __name__ == "__main__":
-    print(f"✅ Config: Docs='{DOCS_FOLDER_NAME}', DBs='{DB_PARENT_DIR_NAME}', LLM='{LLM_MODEL}', MilvusColl='{MILVUS_COLLECTION_NAME}'")
+    print("--- Configuration Loaded ---")
+    print(f"✅ Document Source Folder: '{DOCS_FOLDER_NAME}'")
+    print(f"✅ Local Database Directory: '{DB_PARENT_DIR_NAME}'")
+    print(f"✅ Pinecone Index Name: '{PINECONE_INDEX_NAME}'")
+    print(f"✅ Embedding Model: '{EMBEDDING_MODEL}'")
+    print("--------------------------")

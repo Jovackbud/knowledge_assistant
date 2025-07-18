@@ -150,18 +150,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             jwtToken = data.access_token;
 
-            // CORRECTED & ROBUST: Check for user_profile and its properties
             if (data.user_profile && data.user_profile.user_email) {
                 currentUserProfile = data.user_profile;
                 currentUserEmail = data.user_profile.user_email;
 
-                // Update UI
                 profileEmail.textContent = currentUserEmail;
                 showChat();
                 emailInput.value = '';
 
-                // Handle Admin Panel display
-                const ADMIN_LEVEL = 3; // Must match config.py ADMIN_HIERARCHY_LEVEL
+                const ADMIN_LEVEL = 3; 
                 if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
                     adminControlsArea.classList.remove('hidden');
                     toggleAdminPanelButton.textContent = 'Show Admin Panel';
@@ -211,11 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     sendChatButton.addEventListener('click', async () => {
-        // Debugging logs from previous step (useful to keep for now)
-        console.log("Send button clicked. Checking variables...");
-        console.log("Current prompt:", chatInput.value.trim());
-        console.log("Current user email from state:", currentUserEmail);
-
         const prompt = chatInput.value.trim();
         if (!prompt || !currentUserEmail) {
             console.error("Exiting: Prompt is empty or user is not logged in properly.");
@@ -228,13 +220,19 @@ document.addEventListener('DOMContentLoaded', () => {
         chatInput.value = '';
         feedbackSection.classList.add('hidden');
 
+        // --- SUGGESTION 5: Disable inputs during generation ---
+        chatInput.disabled = true;
+        sendChatButton.disabled = true;
+        sendChatButton.textContent = 'Thinking...';
+
         try {
             const response = await fetch('/rag/chat', {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
                     prompt: prompt,
-                    chat_history: chatHistory.slice(0, -1)
+                    // --- SUGGESTION 6: Limit chat history to last 8 messages (4 turns) ---
+                    chat_history: chatHistory.slice(-9, -1)
                 })
             });
 
@@ -284,6 +282,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
             }
+
+            // --- SUGGESTION 5: Re-enable inputs on success ---
+            chatInput.disabled = false;
+            sendChatButton.disabled = false;
+            sendChatButton.textContent = 'Send';
+
             if (contentDiv.textContent === '...') contentDiv.textContent = "Sorry, I couldn't find an answer.";
             
             chatHistory.push({ role: 'assistant', content: currentAnswer });
@@ -296,6 +300,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const { contentDiv } = appendMessage('assistant', `An error occurred: ${error.message}`);
             if(contentDiv) contentDiv.style.color = 'red';
             currentAnswer = null;
+            
+            // --- SUGGESTION 5: Re-enable inputs on error ---
+            chatInput.disabled = false;
+            sendChatButton.disabled = false;
+            sendChatButton.textContent = 'Send';
         }
     });
     

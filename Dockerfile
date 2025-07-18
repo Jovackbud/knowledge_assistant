@@ -1,33 +1,31 @@
-FROM python:3.12
-ARG OLLAMA_MODEL=gemma:2b-q4_0
+# Dockerfile
 
-WORKDIR /app
+# 1. Use an official Python runtime as a parent image
+# Using python:3.10-slim to match your local environment and keep the image size reasonable
+FROM python:3.10-slim
 
-# System dependencies - add curl here
-RUN apt-get update && apt-get install -y     gcc     libgomp1     curl     && rm -rf /var/lib/apt/lists/*
+# 2. Set environment variables
+# Prevents Python from writing .pyc files to disc
+ENV PYTHONDONTWRITEBYTECODE 1
+# Ensures Python output is sent straight to the terminal without buffering
+ENV PYTHONUNBUFFERED 1
 
-# Switch to root user if necessary, though python images usually are root during build
-USER root
+# 3. Set the working directory inside the container
+WORKDIR /usr/src/app
 
-# Install Ollama
-RUN echo "Installing Ollama..." &&     curl -fsSL https://ollama.com/install.sh | sh &&     echo "Ollama installation script finished."
-RUN ollama pull ${OLLAMA_MODEL}
-
-# Create a non-root user and group
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-
-# Switch to the non-root user
-USER appuser
-
+# 4. Install dependencies
+# Copy the requirements file first to leverage Docker layer caching
 COPY requirements.txt .
+# Install the packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ src/
-COPY scripts/ scripts/
-# COPY run.sh . # Removed
-# RUN chmod +x ./run.sh # Removed
+# 5. Copy the rest of your application code into the container
+# This includes the 'src', 'scripts', and 'prompts' directories
+COPY . .
 
-RUN mkdir -p /data/{docs,database}
+# 6. Make the startup script executable
+RUN chmod +x ./render-start.sh
 
-# Expose port for FastAPI
-EXPOSE 8000
+# 7. Define the command to run your app
+# This will execute the startup script when the container launches
+CMD ["bash", "./render-start.sh"]
