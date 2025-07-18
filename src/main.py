@@ -17,7 +17,7 @@ from .auth_service import fetch_user_access_profile, update_user_permissions_by_
 from .rag_processor import RAGService
 from .ticket_system import suggest_ticket_team, create_ticket
 from .feedback_system import record_feedback
-from .database_utils import init_all_databases, _create_sample_users_if_not_exist
+from .database_utils import init_all_databases
 from .security import create_access_token, get_current_active_user, AuthException
 
 # Configuration and Models
@@ -90,7 +90,6 @@ async def startup_event():
     logger.info("--- Application Startup ---")
     try:
         init_all_databases()
-        _create_sample_users_if_not_exist()
         rag_service = RAGService.from_config()
         logger.info("--- Startup Complete ---")
     except Exception as e:
@@ -139,6 +138,7 @@ async def login(credentials: AuthCredentials):
 async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
     """
     Handles a chat request. User identity is determined by the auth token.
+    This version is updated for correct token-by-token streaming.
     """
     if rag_service is None:
         raise HTTPException(status_code=503, detail="RAG Service is not available.")
@@ -147,19 +147,33 @@ async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(g
     logger.info(f"Chat request received from authenticated user: {user_email}")
 
     try:
-        chain = rag_service.get_rag_chain(current_user, request.chat_history)
+        # Get the two-part chain from the RAG service
+        retrieval_chain, answer_chain = rag_service.get_rag_chain(current_user, request.chat_history)
+        
+        # First, invoke the retrieval part to get the context documents
+        # We need this to extract the sources before we start streaming the answer
+        retrieved_docs = await retrieval_chain.ainvoke({"question": request.prompt})
+        final_sources = [doc.metadata.get("source", "Unknown") for doc in retrieved_docs]
 
         async def stream_generator():
             try:
-                final_sources = []
-                async for chunk in chain.astream({"question": request.prompt}):
-                    if "answer" in chunk:
-                        yield f"data: {json.dumps({'answer_chunk': chunk['answer']})}\n\n"
-                    if "context" in chunk:
-                        final_sources = [doc.metadata.get("source", "Unknown") for doc in chunk["context"]]
+                config = {"configurable": {"session_id": user_email}}
+                
+                # Now, stream the answer chain, passing the retrieved docs and question
+                async for chunk in answer_chain.astream({
+                    "docs": retrieved_docs,
+                    "question": request.prompt
+                }, config=config):
+                    # The chunk from the LLM is an AIMessageChunk object
+                    # Its `content` attribute holds the token string
+                    if chunk.content:
+                        yield f"data: {json.dumps({'answer_chunk': chunk.content})}\n\n"
 
+                # Once the answer stream is complete, send the sources
                 if final_sources:
-                    yield f"data: {json.dumps({'sources': list(set(final_sources))})}\n\n"
+                    unique_sources = list(set(final_sources))
+                    yield f"data: {json.dumps({'sources': unique_sources})}\n\n"
+
             except Exception as e:
                 logger.error(f"Error during RAG stream for user {user_email}: {e}", exc_info=True)
                 yield f"data: {json.dumps({'error': 'An error occurred during generation.'})}\n\n"

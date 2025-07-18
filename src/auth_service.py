@@ -6,9 +6,11 @@ from .config import DEFAULT_HIERARCHY_LEVEL
 logger = logging.getLogger(__name__)
 
 
+# The new, simplified function in src/auth_service.py
 def fetch_user_access_profile(user_email: str) -> Optional[Dict[str, Any]]:
     """
     Fetch user profile with attributes for the advanced hybrid RBAC/ABAC.
+    Relies on get_user_profile to return a well-formed profile or None.
     """
     if not user_email or not isinstance(user_email, str) or "@" not in user_email:
         logger.warning(f"Attempted to fetch profile with invalid email: '{user_email}'.")
@@ -19,37 +21,10 @@ def fetch_user_access_profile(user_email: str) -> Optional[Dict[str, Any]]:
         if not profile:
             return None  # get_user_profile already logs this
 
-        # Validate structure and types for fields used in RAG logic
-        # get_user_profile should already ensure these types or provide defaults
-        required_fields_types = {
-            "user_hierarchy_level": int,
-            "departments": list,
-            "projects_membership": list,
-            "contextual_roles": dict
-        }
-
-        for field, expected_type in required_fields_types.items():
-            if field not in profile:
-                logger.error(
-                    f"Profile for {user_email} is missing critical field: '{field}'. This indicates an issue in get_user_profile or DB schema. Profile: {profile}")
-                return None
-            if not isinstance(profile[field], expected_type):
-                logger.error(
-                    f"Profile field '{field}' for {user_email} has incorrect type. Expected {expected_type}, got {type(profile[field])}. Profile: {profile}")
-                # Attempt to fix critical fields, otherwise fail
-                if field == "user_hierarchy_level":
-                    profile[field] = DEFAULT_HIERARCHY_LEVEL
-                elif field == "departments" or field == "projects_membership":
-                    profile[field] = []
-                elif field == "contextual_roles":
-                    profile[field] = {}
-                else:
-                    return None  # Unknown critical field type mismatch
-
         logger.info(f"Successfully fetched and validated profile for {user_email}.")
         return profile
     except Exception as e:
-        logger.error(f"Error fetching or validating profile for {user_email}: {e}", exc_info=True)
+        logger.error(f"Error fetching profile for {user_email}: {e}", exc_info=True)
         return None
 
 

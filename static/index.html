@@ -3,57 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Knowledge Assistant</title>
+    <title>AI4AI Knowledge Assistant</title>
     <link rel="icon" type="image/png" href="/static/icon.png">
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1, h2 { color: #2c3e50; }
         .hidden { display: none; }
-        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section, 
-        #admin-permissions-section { 
-            margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; 
+        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-creation-trigger, #admin-permissions-section { 
+            margin-bottom: 20px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; 
         }
-        #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
-        .chat-message { margin-bottom: 10px; }
-        .user-message { text-align: right; color: #007bff; }
-        .assistant-message { text-align: left; color: #28a745; }
+        #chat-history { height: 400px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #fdfdfd; border-radius: 5px; }
+        .chat-message { margin-bottom: 12px; line-height: 1.5; }
+        .user-message { text-align: right; color: #0056b3; }
+        .assistant-message { text-align: left; color: #212529; }
         .assistant-message-content { white-space: pre-wrap; word-wrap: break-word; }
-        .sources-container { font-size: 0.8em; color: #666; margin-top: 10px; padding-top: 5px; border-top: 1px dashed #ccc; }
-        .sources-container strong { color: #444; }
-        .source-item { margin-left: 15px; }
-        label { display: block; margin-bottom: 5px; }
+        .sources-container { font-size: 0.85em; color: #555; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #ccc; }
+        .sources-container strong { color: #333; }
+        .source-item { margin-left: 18px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #495057; }
         input, textarea, select { 
-            width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; 
-            border: 1px solid #ccc; border-radius: 4px; 
+            width: calc(100% - 24px); padding: 10px; margin-bottom: 12px; 
+            border: 1px solid #ccc; border-radius: 4px; font-size: 1em;
         }
         button { 
             padding: 10px 15px; background-color: #007bff; color: white; 
-            border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; 
+            border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; font-weight: 600;
         }
         button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #a0c7ff; cursor: not-allowed; }
         #feedback-buttons button { background-color: #6c757d; }
         #feedback-buttons button:hover { background-color: #545b62; }
         #ticket-modal { 
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            background-color: white; padding: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.2); 
-            z-index: 1000; border-radius: 8px; 
+            background-color: white; padding: 30px; box-shadow: 0 5px 20px rgba(0,0,0,0.25); 
+            z-index: 1000; border-radius: 8px; border-top: 5px solid #007bff;
         }
-        #ticket-form-container { width: 400px; }
+        #ticket-form-container { width: 450px; }
         pre { 
-            white-space: pre-wrap; word-wrap: break-word; background-color: #efefef; 
-            padding: 10px; border-radius: 3px; font-size: 0.9em;
+            white-space: pre-wrap; word-wrap: break-word; background-color: #f0f0f0; 
+            padding: 10px; border-radius: 4px; font-size: 0.9em;
         }
-        #admin-controls-area { margin-top: 15px; padding-top:10px; border-top: 1px solid #eee; }
+        #admin-controls-area { margin-top: 20px; padding-top:15px; border-top: 1px solid #eee; }
         #toggleAdminPanelButton { background-color: #ffc107; color: #212529; }
         #toggleAdminPanelButton:hover { background-color: #e0a800; }
         .contextual-roles-builder { display: flex; align-items: center; gap: 10px; }
         .contextual-roles-builder input { flex-grow: 1; }
         .contextual-roles-builder button { flex-shrink: 0; }
+        fieldset { border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 5px; }
+        legend { font-weight: 700; font-size: 1.1em; padding: 0 10px; color: #333; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        small { color: #6c757d; font-style: italic; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Company Knowledge Assistant</h1>
+        <h1>AI4AI Knowledge Assistant</h1>
 
         <!-- Login Section -->
         <div id="login-section">
@@ -78,66 +86,69 @@
         <!-- Admin Permissions Section (hidden by default AND toggled) -->
         <div id="admin-permissions-section" class="hidden">
             <h2>Admin Panel</h2>
-            <hr style="margin-bottom: 20px;">
             
-            <h3>View User Permissions</h3>
-            <div>
-                <label for="view-target-user-email">User Email to View:</label>
-                <input type="email" id="view-target-user-email" required>
-            </div>
-            <button type="button" id="viewPermissionsButton">View Permissions</button>
-            <div id="admin-view-permissions-message" style="margin-top: 10px;"></div>
-            <div id="user-permissions-display" style="margin-top: 10px; padding: 10px; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 4px;" class="hidden">
-                <h4>Permissions for <span id="display-user-email"></span>:</h4>
-                <pre id="display-user-permissions-json"></pre>
-            </div>
-            <hr style="margin-top: 20px; margin-bottom: 20px;">
+            <fieldset>
+                <legend>View User Permissions</legend>
+                <div>
+                    <label for="view-target-user-email">User Email to View:</label>
+                    <input type="email" id="view-target-user-email" required>
+                </div>
+                <button type="button" id="viewPermissionsButton">View Permissions</button>
+                <div id="admin-view-permissions-message" style="margin-top: 10px;"></div>
+                <div id="user-permissions-display" class="hidden" style="margin-top: 10px;">
+                    <h4>Permissions for <span id="display-user-email"></span>:</h4>
+                    <pre id="display-user-permissions-json"></pre>
+                </div>
+            </fieldset>
 
-            <h3>Manage User Permissions</h3>
-            <form id="admin-permissions-form">
-                <div>
-                    <label for="target-user-email">Target User Email:</label>
-                    <input type="email" id="target-user-email" required>
-                    <small style="display: block; margin-bottom: 10px;">(Creates new user if email doesn't exist, or updates existing user.)</small>
-                </div>
-                <div>
-                    <label for="target-hierarchy-level">New Hierarchy Level:</label>
-                    <input type="number" id="target-hierarchy-level" placeholder="(leave blank for no change)">
-                </div>
-                <div>
-                    <label for="target-departments">Departments (comma-separated):</label>
-                    <input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (leave blank for no change)">
-                    <datalist id="known-departments-list"></datalist>
-                </div>
-                <div>
-                    <label for="target-projects">Projects (comma-separated):</label>
-                    <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (leave blank for no change)">
-                </div>
-                
-                <div>
-                    <label>Contextual Roles:</label>
-                    <div class="contextual-roles-builder">
-                        <input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)">
-                        <input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)">
-                        <button type="button" id="addRoleButton">Add Role</button>
+            <fieldset>
+                <legend>Manage User Permissions</legend>
+                <form id="admin-permissions-form">
+                    <div>
+                        <label for="target-user-email">Target User Email:</label>
+                        <input type="email" id="target-user-email" required>
+                        <small style="display: block; margin-bottom: 10px;">(Creates a new user if email doesn't exist, or updates an existing one.)</small>
                     </div>
-                    <label>Current Roles to Add/Update:</label>
-                    <pre id="contextual-roles-preview">{}</pre>
-                    <small>(Building roles here will overwrite existing roles for this user upon submission.)</small>
+                    <div>
+                        <label for="target-hierarchy-level">New Hierarchy Level:</label>
+                        <input type="number" id="target-hierarchy-level" placeholder="(e.g., 0, 1, 2, 3 - leave blank for no change)">
+                    </div>
+                    <div>
+                        <label for="target-departments">Departments (comma-separated):</label>
+                        <input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (leave blank for no change)">
+                        <datalist id="known-departments-list"></datalist>
+                    </div>
+                    <div>
+                        <label for="target-projects">Projects (comma-separated):</label>
+                        <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (leave blank for no change)">
+                    </div>
+                    
+                    <div>
+                        <label>Contextual Roles:</label>
+                        <div class="contextual-roles-builder">
+                            <input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)">
+                            <input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)">
+                            <button type="button" id="addRoleButton">Add Role</button>
+                        </div>
+                        <label>Current Roles to Add/Update:</label>
+                        <pre id="contextual-roles-preview">{}</pre>
+                        <small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small>
+                    </div>
+
+                    <button type="submit">Update User Permissions</button>
+                </form>
+                <div id="admin-permissions-message" style="margin-top: 10px;"></div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Remove User</legend>
+                <div>
+                    <label for="remove-target-user-email">User Email to Remove:</label>
+                    <input type="email" id="remove-target-user-email" required>
                 </div>
-
-                <button type="submit" id="updatePermissionsButton">Update User Permissions</button>
-            </form>
-            <div id="admin-permissions-message" style="margin-top: 10px;"></div>
-            <hr style="margin-top: 20px; margin-bottom: 20px;">
-
-            <h3>Remove User</h3>
-            <div>
-                <label for="remove-target-user-email">User Email to Remove:</label>
-                <input type="email" id="remove-target-user-email" required>
-            </div>
-            <button type="button" id="removeUserButton" style="background-color: #dc3545; color: white;">Remove User</button>
-            <div id="admin-remove-user-message" style="margin-top: 10px;"></div>
+                <button type="button" id="removeUserButton" class="btn-danger">Remove User</button>
+                <div id="admin-remove-user-message" style="margin-top: 10px;"></div>
+            </fieldset>
         </div>
 
         <!-- Chat Section (hidden by default) -->
@@ -160,7 +171,7 @@
 
         <!-- Ticket Creation Button (hidden by default) -->
         <div id="ticket-creation-trigger" class="hidden">
-            <hr>
+            <hr style="margin-top: 25px;">
             <button id="openTicketModalButton">Create Support Ticket</button>
         </div>
         
@@ -168,19 +179,18 @@
         <div id="ticket-modal" class="hidden">
             <div id="ticket-form-container">
                 <h2>New Support Ticket</h2>
-                <label for="ticket-question">Issue/Question:</label>
-                <textarea id="ticket-question" rows="3"></textarea>
-                <label for="ticket-team">Team:</label>
+                <label for="ticket-question">Your Question/Issue:</label>
+                <textarea id="ticket-question" rows="4"></textarea>
+                <label for="ticket-team">Select a Team:</label>
                 <select id="ticket-team"></select>
-                <p id="team-suggestion"></p>
+                <p id="team-suggestion" style="font-style: italic; color: #555; margin-top: -5px; margin-bottom: 10px;"></p>
                 <button id="submitTicketButton">Submit Ticket</button>
-                <button id="cancelTicketButton">Cancel</button>
-                <p id="ticket-submission-message" style="color: green;"></p>
+                <button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button>
+                <p id="ticket-submission-message" style="margin-top: 10px;"></p>
             </div>
         </div>
     </div>
 
-    <!-- The script is now loaded from an external file -->
     <script src="/static/app.js"></script>
 </body>
 </html>
