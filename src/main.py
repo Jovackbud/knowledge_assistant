@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Security, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, Header, Security, BackgroundTasks, Response, Cookie
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,16 +50,21 @@ logger = logging.getLogger(__name__)
 
 # --- FastAPI Dependencies for Security ---
 
-def get_current_user_profile(token: str = Header(None, alias="Authorization")) -> Dict[str, Any]:
-    if token is None or not token.lower().startswith("bearer "):
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Not authenticated: Missing or invalid token format.")
-    
-    token_value = token.split(" ")[1]
+def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> Dict[str, Any]:
+    if access_token is None:
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated: Missing access token cookie."
+        )
     try:
-        user_profile = get_current_active_user(token=token_value)
+        user_profile = get_current_active_user(token=access_token)
         return user_profile
     except AuthException as e:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=e.detail, headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail=e.detail,
+            headers={"WWW-Authenticate": "Bearer"}, 
+        )
 
 def get_current_admin_user(current_user: Dict[str, Any] = Depends(get_current_user_profile)) -> Dict[str, Any]:
     user_level = current_user.get("user_hierarchy_level")
@@ -114,27 +119,51 @@ async def root():
 # --- Authentication Endpoint ---
 
 @app.post("/auth/login")
-async def login(credentials: AuthCredentials):
+async def login(credentials: AuthCredentials, response: Response): # Add response: Response here
     try:
         user_profile = fetch_user_access_profile(credentials.email)
         if not user_profile:
             raise HTTPException(status_code=404, detail="User not found or credentials incorrect.")
 
+        # Token is created
         access_token = create_access_token(data={"sub": user_profile["user_email"]})
         
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user_profile": user_profile
-        }
+        # --- NEW: Set the token in a secure, httpOnly cookie ---
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,          # Prevents JavaScript access (XSS protection)
+            samesite="strict",      # CSRF protection
+            secure=True,            # Only send over HTTPS (essential for production)
+            max_age=60 * 60 * 8,    # 8-hour expiry
+            path="/"
+        )
+        
+        return {"user_profile": user_profile}
+
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
         logger.error(f"Internal server error during login for {credentials.email}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during login.")
 
+@app.post("/auth/logout")
+async def logout(response: Response):
+    """
+    Clears the access_token cookie, securely logging the user out.
+    """
+    response.delete_cookie(key="access_token", path="/")
+    return {"message": "Logout successful"}
+
+@app.post("/auth/me")
+async def read_users_me(current_user: Dict[str, Any] = Depends(get_current_user_profile)):
+    """
+    Endpoint to get the current user's profile based on their valid cookie.
+    This is used for session validation on the frontend.
+    """
+    return {"user_profile": current_user}
+
 # --- Core RAG Endpoint ---
-# --- UPGRADED: Implements the history-aware retriever logic ---
 @app.post("/rag/chat")
 async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
     if rag_service is None:
@@ -143,29 +172,37 @@ async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(g
     user_email = current_user.get("user_email")
     logger.info(f"Chat request received from authenticated user: {user_email}")
 
-    full_chat_history = request.chat_history + [{"role": "user", "content": request.prompt}]
-
     try:
-        conversational_rag_chain = rag_service.get_rag_chain(current_user, full_chat_history)
+        # 1. Get the unified, history-aware RAG chain from the service.
+        conversational_rag_chain = rag_service.get_rag_chain(current_user, request.chat_history)
         
         async def stream_generator():
             try:
+                # 2. Define the input dictionary for the chain.
                 chain_input = {
                     "question": request.prompt,
                     "chat_history": request.chat_history
                 }
                 
                 final_sources = []
+                # 3. Stream the events from the chain.
                 async for event in conversational_rag_chain.astream_events(chain_input, version="v1"):
                     kind = event["event"]
+                    name = event.get("name")
+
+                    # Stream out the answer chunks as they are generated by the LLM.
                     if kind == "on_chat_model_stream":
                         chunk_content = event["data"]["chunk"].content
                         if chunk_content:
                             yield f"data: {json.dumps({'answer_chunk': chunk_content})}\n\n"
-                    elif kind == "on_chain_end":
-                        final_docs = event["data"]["output"].get("docs", [])
-                        final_sources = list(set([doc.metadata.get("source", "Unknown") for doc in final_docs]))
 
+                    # When the named retrieval/reranking step ends, capture its output (the documents).
+                    if kind == "on_chain_end" and name == "retriever_and_reranker_step":
+                        final_docs = event["data"].get("output", [])
+                        if final_docs:
+                            final_sources = list(set([doc.metadata.get("source", "Unknown") for doc in final_docs]))
+
+                # After the stream is complete, send the consolidated sources.
                 if final_sources:
                     yield f"data: {json.dumps({'sources': final_sources})}\n\n"
 
@@ -176,7 +213,7 @@ async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(g
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
     except Exception as e:
-        logger.error(f"Error in RAG service for user {user_email}: {e}", exc_info=True)
+        logger.error(f"Error creating RAG chain for user {user_email}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing chat request.")
 
 
@@ -231,7 +268,6 @@ class UserPermissionsRequest(BaseModel):
 class UserRemovalRequest(BaseModel):
     target_email: str
 
-# --- REFINED: Dependencies are no longer redundant ---
 @app.get("/admin/config_tags")
 async def get_config_tags(_: Dict[str, Any] = Depends(get_current_admin_user)):
     return {"known_department_tags": KNOWN_DEPARTMENT_TAGS}

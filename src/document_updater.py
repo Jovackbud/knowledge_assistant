@@ -23,6 +23,8 @@ from .config import (
 
 logger = logging.getLogger("DocumentUpdater")
 
+_metadata_cache = {}
+
 # Initialize the S3 client. Boto3 will automatically use the credentials and endpoint URL from .env
 s3_client = boto3.client("s3")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
@@ -33,23 +35,38 @@ def _sanitize_tag(tag: str) -> str:
     if not isinstance(tag, str): return ""
     return re.sub(r'[^a-zA-Z0-9]', '', tag).upper()
 
+
 def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
     """
     Looks for a 'metadata.json' file in the current directory or any parent directory.
-    This allows for inherited permissions.
+    This allows for inherited permissions. Caches results to avoid redundant S3 calls.
     """
+    global _metadata_cache
+    
+    # Check cache first
+    if start_path in _metadata_cache:
+        return _metadata_cache[start_path]
+
+    original_path = start_path
     current_dir = start_path
-    # Iterate up the directory tree until we hit the root
     while current_dir != current_dir.parent:
-        metadata_file = current_dir / "metadata.json"
+        # Check cache for parent directories as well during traversal
+        if current_dir in _metadata_cache:
+            _metadata_cache[original_path] = _metadata_cache[current_dir]
+            return _metadata_cache[current_dir]
+
+        metadata_file_key = str(current_dir / "metadata.json").replace('\\', '/')
         try:
-            # Check S3 if this file exists
-            response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=str(metadata_file).replace('\\', '/'))
+            response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=metadata_file_key)
             metadata_content = response['Body'].read().decode('utf-8')
-            return json.loads(metadata_content)
+            found_metadata = json.loads(metadata_content)
+            _metadata_cache[original_path] = found_metadata # Cache result
+            return found_metadata
         except (ClientError, json.JSONDecodeError):
-            # If not found or invalid json, go to the parent directory
             current_dir = current_dir.parent
+    
+    # If not found all the way to the root, cache the negative result
+    _metadata_cache[original_path] = None
     return None
 
 def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
@@ -163,11 +180,16 @@ def save_sync_state(state: Dict[str, str]):
         logger.info(f"Saved current S3 sync state to '{SYNC_STATE_FILE}'.")
     except IOError: logger.error("Failed to save sync state file.")
 
+def clear_metadata_cache():
+    global _metadata_cache
+    _metadata_cache.clear()
+
 def synchronize_documents():
     """
     Synchronizes documents from the S3/R2 bucket to the Pinecone vector store.
     This version includes robust error handling for Pinecone operations.
     """
+    clear_metadata_cache()
     if not S3_BUCKET_NAME:
         logger.error("S3_BUCKET_NAME environment variable not set. Aborting document synchronization.")
         return

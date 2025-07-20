@@ -1,9 +1,5 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
 from typing import List, Dict
-
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -30,8 +26,6 @@ KNOWN_DEPARTMENT_TAGS = [
 # --- Vector Store Configuration ---
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant")
 
-# Mapping for role-specific folder names to role tags. Folder names are matched case-insensitively.
-# Value is the role tag stored in metadata.
 ROLE_SPECIFIC_FOLDER_TAGS = {
     "lead_docs": "LEAD",
     "admin_files": "ADMIN",
@@ -39,9 +33,9 @@ ROLE_SPECIFIC_FOLDER_TAGS = {
     "team_lead_private": "TEAM_LEAD"
 }
 
-# Mapping for folder names to hierarchy levels. Matched case-insensitively.
 # Numeric levels: Higher number means more privilege / more restricted access.
-# Matched if a folder part contains the KEY (from this dict) and its _LEVEL_ (e.g., "STAFF_0_" or "MANAGER_1_"). Example: "STAFF_0_files", "confidential_MANAGER_1_docs".
+# These values can be used in 'metadata.json' files. The system does not automatically
+# parse them from folder names.
 HIERARCHY_LEVELS_CONFIG = {
     "STAFF": 0,
     "MEMBER": 0, # Alias for staff

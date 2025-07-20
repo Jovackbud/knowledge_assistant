@@ -11,8 +11,9 @@ from .database_utils import get_user_profile
 
 # This should be a long, random string. You can generate one with:
 # openssl rand -hex 32
-# It's best practice to load this from an environment variable, not hardcode it.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "a_very_insecure_default_secret_key_for_dev_only")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("FATAL: JWT_SECRET_KEY environment variable is not set. Application cannot start.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8 # 8 hours
 

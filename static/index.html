@@ -81,16 +81,23 @@
         legend { font-weight: 700; font-size: 1.1em; padding: 0 10px; color: #333; }
         pre { white-space: pre-wrap; word-wrap: break-word; background-color: #e9ecef; padding: 10px; border-radius: 4px; font-size: 0.9em; }
         small { color: #6c757d; font-style: italic; }
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.6); z-index: 1001;
+
+        /* --- NEW: <dialog> element styling --- */
+        dialog {
+            border: none;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 0;
+            width: 90%;
+            max-width: 900px;
+            height: 80vh;
+            max-height: 700px;
+        }
+        dialog::backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
         }
         .admin-modal-container {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 90%; max-width: 900px; height: 80vh; max-height: 700px;
-            background-color: var(--container-bg); border-radius: 8px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-            display: flex; flex-direction: column; z-index: 1002;
+            display: flex; flex-direction: column; height: 100%;
         }
         .admin-modal-header {
             display: flex; justify-content: space-between; align-items: center;
@@ -130,35 +137,42 @@
         <div id="ticket-modal" class="hidden"><h2>New Support Ticket</h2><label for="ticket-question">Your Question/Issue:</label><textarea id="ticket-question" rows="4"></textarea><label for="ticket-team">Select a Team:</label><select id="ticket-team"></select><p id="team-suggestion" style="font-style: italic; color: #555; margin-top: -0.5rem; margin-bottom: 1rem;"></p><button id="submitTicketButton">Submit Ticket</button><button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button><p id="ticket-submission-message" style="margin-top: 1rem;"></p></div>
     </div>
 
-    <div id="admin-modal-overlay" class="modal-overlay hidden"></div>
-    <div id="admin-modal" class="admin-modal-container hidden">
-        <div class="admin-modal-header"><h2>Admin Panel</h2><button id="admin-modal-close-btn" class="admin-modal-close-btn">×</button></div>
-        <div class="admin-modal-body">
-            <nav class="admin-modal-nav">
-                <button class="admin-nav-button active" data-panel="view-tickets-panel">View Tickets</button>
-                <button class="admin-nav-button" data-panel="view-permissions-panel">View Permissions</button>
-                <button class="admin-nav-button" data-panel="manage-permissions-panel">Manage Permissions</button>
-                <button class="admin-nav-button" data-panel="remove-user-panel">Remove User</button>
-            </nav>
-            <main class="admin-modal-content">
-                <div id="view-tickets-panel" class="admin-panel active">
-                    <fieldset><legend>Recent Support Tickets</legend>
-                        <p id="tickets-loading-message">Loading tickets...</p>
-                        <div id="tickets-table-container" class="hidden">
-                            <table class="tickets-table">
-                                <thead><tr><th>Timestamp</th><th>User</th><th>Question</th><th>Selected Team</th><th>Status</th></tr></thead>
-                                <tbody id="tickets-table-body"></tbody>
-                            </table>
-                        </div>
-                    </fieldset>
-                </div>
-                <div id="view-permissions-panel" class="admin-panel"><fieldset><legend>View User Permissions</legend><label for="view-target-user-email">User Email to View:</label><input type="email" id="view-target-user-email"><button type="button" id="viewPermissionsButton">View Permissions</button><div id="admin-view-permissions-message" style="margin-top: 10px;"></div><div id="user-permissions-display" class="hidden" style="margin-top: 10px;"><h4>Permissions for <span id="display-user-email"></span>:</h4><pre id="display-user-permissions-json"></pre></div></fieldset></div>
-                <div id="manage-permissions-panel" class="admin-panel"><fieldset><legend>Manage User Permissions</legend><form id="admin-permissions-form"><label for="target-user-email">Target User Email:</label><input type="email" id="target-user-email" required><small style="display: block; margin-top: -0.5rem; margin-bottom: 1rem;">(Creates a new user or updates an existing one.)</small><label for="target-hierarchy-level">New Hierarchy Level:</label><input type="number" id="target-hierarchy-level" placeholder="e.g., 0, 1, 2, 3 (blank for no change)"><label for="target-departments">Departments (comma-separated):</label><input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (blank for no change)"><datalist id="known-departments-list"></datalist><label for="target-projects">Projects (comma-separated):</label><input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (blank for no change)"><label>Contextual Roles:</label><div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.5rem;"><input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)" style="margin-bottom: 0;"><input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)" style="margin-bottom: 0;"><button type="button" id="addRoleButton" style="flex-shrink: 0;">Add Role</button></div><label>Current Roles to Add/Update:</label><pre id="contextual-roles-preview">{}</pre><small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small><button type="submit" style="margin-top: 1rem;">Update User Permissions</button></form><div id="admin-permissions-message" style="margin-top: 10px;"></div></fieldset></div>
-                <div id="remove-user-panel" class="admin-panel"><fieldset><legend>Remove User</legend><label for="remove-target-user-email">User Email to Remove:</label><input type="email" id="remove-target-user-email"><button type="button" id="removeUserButton" class="btn-danger">Remove User</button><div id="admin-remove-user-message" style="margin-top: 10px;"></div></fieldset></div>
-            </main>
+    <!-- NEW: Replaced the div-based modal with a proper <dialog> element for accessibility and modern standards -->
+    <dialog id="admin-modal">
+        <div class="admin-modal-container">
+            <div class="admin-modal-header">
+                <h2>Admin Panel</h2>
+                <button id="admin-modal-close-btn" class="admin-modal-close-btn" aria-label="Close Admin Panel">×</button>
+            </div>
+            <div class="admin-modal-body">
+                <nav class="admin-modal-nav">
+                    <button class="admin-nav-button active" data-panel="view-tickets-panel">View Tickets</button>
+                    <button class="admin-nav-button" data-panel="view-permissions-panel">View Permissions</button>
+                    <button class="admin-nav-button" data-panel="manage-permissions-panel">Manage Permissions</button>
+                    <button class="admin-nav-button" data-panel="remove-user-panel">Remove User</button>
+                </nav>
+                <main class="admin-modal-content">
+                    <div id="view-tickets-panel" class="admin-panel active">
+                        <fieldset><legend>Recent Support Tickets</legend>
+                            <p id="tickets-loading-message">Loading tickets...</p>
+                            <div id="tickets-table-container" class="hidden">
+                                <table class="tickets-table">
+                                    <thead><tr><th>Timestamp</th><th>User</th><th>Question</th><th>Selected Team</th><th>Status</th></tr></thead>
+                                    <tbody id="tickets-table-body"></tbody>
+                                </table>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div id="view-permissions-panel" class="admin-panel"><fieldset><legend>View User Permissions</legend><label for="view-target-user-email">User Email to View:</label><input type="email" id="view-target-user-email"><button type="button" id="viewPermissionsButton">View Permissions</button><div id="admin-view-permissions-message" style="margin-top: 10px;"></div><div id="user-permissions-display" class="hidden" style="margin-top: 10px;"><h4>Permissions for <span id="display-user-email"></span>:</h4><pre id="display-user-permissions-json"></pre></div></fieldset></div>
+                    <div id="manage-permissions-panel" class="admin-panel"><fieldset><legend>Manage User Permissions</legend><form id="admin-permissions-form"><label for="target-user-email">Target User Email:</label><input type="email" id="target-user-email" required><small style="display: block; margin-top: -0.5rem; margin-bottom: 1rem;">(Creates a new user or updates an existing one.)</small><label for="target-hierarchy-level">New Hierarchy Level:</label><input type="number" id="target-hierarchy-level" placeholder="e.g., 0, 1, 2, 3 (blank for no change)"><label for="target-departments">Departments (comma-separated):</label><input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (blank for no change)"><datalist id="known-departments-list"></datalist><label for="target-projects">Projects (comma-separated):</label><input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (blank for no change)"><label>Contextual Roles:</label><div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.5rem;"><input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)" style="margin-bottom: 0;"><input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)" style="margin-bottom: 0;"><button type="button" id="addRoleButton" style="flex-shrink: 0;">Add Role</button></div><label>Current Roles to Add/Update:</label><pre id="contextual-roles-preview">{}</pre><small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small><button type="submit" style="margin-top: 1rem;">Update User Permissions</button></form><div id="admin-permissions-message" style="margin-top: 10px;"></div></fieldset></div>
+                    <div id="remove-user-panel" class="admin-panel"><fieldset><legend>Remove User</legend><label for="remove-target-user-email">User Email to Remove:</label><input type="email" id="remove-target-user-email"><button type="button" id="removeUserButton" class="btn-danger">Remove User</button><div id="admin-remove-user-message" style="margin-top: 10px;"></div></fieldset></div>
+                </main>
+            </div>
         </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/app.js"></script>
+    </dialog>
+
+    <!-- THE FIX IS HERE: The integrity hash has been updated to the correct value -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" integrity="sha512-rCQgmUulW6f6QegOvTntKKb5IAoxTpGVCdWqYjkXEpzAns6XUFs8NKVqWe+KQpctp/EoRSFSuykVputqknLYMg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="/static/app.js" defer></script>
 </body>
 </html>

@@ -1,7 +1,8 @@
-// static/app.js - Final, consolidated version
+// static/app.js - FINAL DEPLOYMENT VERSION (Updated)
+// This version uses secure, httpOnly cookies for authentication and validates the session on startup.
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Element Selectors ---
+    // --- Element Selectors (unchanged) ---
     const loginSection = document.getElementById('login-section');
     const userProfileSection = document.getElementById('user-profile-section');
     const chatSection = document.getElementById('chat-section');
@@ -49,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeUserButton = document.getElementById('removeUserButton');
     const adminRemoveUserMessage = document.getElementById('admin-remove-user-message');
     const openAdminPanelButton = document.getElementById('openAdminPanelButton');
-    const adminModalOverlay = document.getElementById('admin-modal-overlay');
     const adminModal = document.getElementById('admin-modal');
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
     const adminNavButtons = document.querySelectorAll('.admin-nav-button');
@@ -59,19 +59,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const ticketsTableBody = document.getElementById('tickets-table-body');
 
     // --- State Variables ---
-    let currentUserProfile = JSON.parse(localStorage.getItem('knowledgeAssistantProfile')) || null;
-    let jwtToken = localStorage.getItem('knowledgeAssistantToken') || null;
-    let currentUserEmail = currentUserProfile ? currentUserProfile.user_email : null;
+    let currentUserProfile = null; // Start with null, will be populated by initApp
+    let currentUserEmail = null;
     let currentQuestion = null;
     let currentAnswer = null;
     let chatHistory = [];
     let contextualRolesObject = {};
+    const ADMIN_LEVEL = 3;
 
-    // --- Helper function for API calls ---
-    function getAuthHeaders() {
-        if (!jwtToken) return { 'Content-Type': 'application/json' };
-        return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${jwtToken}` };
-    }
+    // --- Helper for fetch options. 'credentials: include' is VITAL for sending cookies. ---
+    const getFetchOptions = (method = 'GET', body = null) => {
+        const options = {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include' // This tells the browser to send cookies with the request.
+        };
+        if (body) {
+            options.body = JSON.stringify(body);
+        }
+        return options;
+    };
 
     // --- Visibility & UI Functions ---
     function showLogin() {
@@ -85,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function loadAdminPanelData() {
         try {
-            const response = await fetch('/admin/config_tags', { headers: getAuthHeaders() });
+            const response = await fetch('/admin/config_tags', getFetchOptions());
             if (!response.ok) return;
             const data = await response.json();
             knownDepartmentsDatalist.innerHTML = '';
@@ -101,10 +108,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function hideTicketModal() {
         ticketModal.classList.add('hidden');
-        ticketQuestionTextarea.value = '';
-        ticketSubmissionMessage.textContent = '';
-        teamSuggestionP.textContent = '';
-        ticketTeamSelect.innerHTML = '';
+        ticketQuestionTextarea.value = ''; ticketSubmissionMessage.textContent = '';
+        teamSuggestionP.textContent = ''; ticketTeamSelect.innerHTML = '';
     }
     
     function appendMessage(role, text) {
@@ -121,8 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contentDiv.innerHTML = text;
         const sourcesDiv = document.createElement('div');
         sourcesDiv.classList.add('sources-container', 'hidden');
-        messageDiv.appendChild(contentDiv);
-        messageDiv.appendChild(sourcesDiv);
+        messageDiv.appendChild(contentDiv); messageDiv.appendChild(sourcesDiv);
         chatHistoryDiv.appendChild(messageDiv);
         chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
         return { contentDiv, sourcesDiv };
@@ -138,25 +142,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = emailInput.value.trim();
         if (!email) { loginError.textContent = 'Please enter your email.'; return; }
         loginError.textContent = '';
-        loginButton.disabled = true;
-        loginButton.textContent = 'Logging in...';
+        loginButton.disabled = true; loginButton.textContent = 'Logging in...';
         try {
-            const response = await fetch('/auth/login', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
-            });
+            const response = await fetch('/auth/login', getFetchOptions('POST', { email }));
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Login failed');
-            jwtToken = data.access_token;
+            
             currentUserProfile = data.user_profile;
             currentUserEmail = data.user_profile.user_email;
-            localStorage.setItem('knowledgeAssistantToken', jwtToken);
             localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(currentUserProfile));
+
             if (currentUserProfile) {
                 profileEmail.textContent = currentUserEmail;
                 showChat();
                 emailInput.value = '';
-                const ADMIN_LEVEL = 3; 
                 if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
                     adminControlsArea.classList.remove('hidden');
                 } else {
@@ -166,24 +165,32 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Login error:', error);
             loginError.textContent = error.message;
-            currentUserEmail = null; 
-            currentUserProfile = null;
-            jwtToken = null;
+            currentUserEmail = null; currentUserProfile = null;
+            localStorage.removeItem('knowledgeAssistantProfile');
         } finally {
-            loginButton.disabled = false;
-            loginButton.textContent = 'Login';
+            loginButton.disabled = false; loginButton.textContent = 'Login';
         }
     });
 
-    logoutButton.addEventListener('click', () => {
-        localStorage.removeItem('knowledgeAssistantToken');
-        localStorage.removeItem('knowledgeAssistantProfile');
-        currentUserEmail = null; currentUserProfile = null; jwtToken = null;
-        currentQuestion = null; currentAnswer = null; chatHistory = [];
-        contextualRolesObject = {};
-        chatHistoryDiv.innerHTML = ''; profileEmail.textContent = '';
-        adminPermissionsForm.reset(); contextualRolesPreview.textContent = '{}';
-        showLogin();
+    logoutButton.addEventListener('click', async () => {
+        try {
+            await fetch('/auth/logout', getFetchOptions('POST'));
+        } catch (error) {
+            console.error("Logout failed, but clearing client-side state anyway:", error);
+        } finally {
+            localStorage.removeItem('knowledgeAssistantProfile');
+            currentUserEmail = null;
+            currentUserProfile = null; // Reset the in-memory profile
+            currentQuestion = null;
+            currentAnswer = null;
+            chatHistory = [];
+            contextualRolesObject = {};
+            chatHistoryDiv.innerHTML = '';
+            profileEmail.textContent = '';
+            adminPermissionsForm.reset();
+            contextualRolesPreview.textContent = '{}';
+            showLogin();
+        }
     });
 
     const handleSend = async () => {
@@ -192,21 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
         appendMessage('user', prompt);
         chatHistory.push({ role: 'user', content: prompt });
         currentQuestion = prompt;
-        chatInput.value = '';
-        chatInput.style.height = 'auto';
+        chatInput.value = ''; chatInput.style.height = 'auto';
         feedbackSection.classList.add('hidden');
-        chatInput.disabled = true;
-        sendChatButton.disabled = true;
-        sendChatButton.textContent = '...';
+        chatInput.disabled = true; sendChatButton.disabled = true; sendChatButton.textContent = '...';
         try {
-            const response = await fetch('/rag/chat', {
-                method: 'POST', headers: getAuthHeaders(),
-                body: JSON.stringify({ prompt: prompt, chat_history: chatHistory.slice(-8) })
-            });
-            if (!response.ok || !response.body) {
-                const errData = await response.json();
-                throw new Error(errData.detail || 'Failed to get a valid response from the server.');
-            }
+            const response = await fetch('/rag/chat', getFetchOptions('POST', { prompt: prompt, chat_history: chatHistory.slice(-8) }));
+            if (!response.ok || !response.body) { const errData = await response.json(); throw new Error(errData.detail || 'Failed to get a valid response from the server.'); }
             const { contentDiv, sourcesDiv } = appendMessage('assistant', '...');
             currentAnswer = '';
             const reader = response.body.getReader();
@@ -232,131 +230,87 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const sourceList = jsonData.sources.map(source => `<li class="source-item">${source}</li>`).join('');
                                 sourcesDiv.innerHTML = `<strong>Sources:</strong><ul>${sourceList}</ul>`;
                             }
-                            if (jsonData.error) {
-                                contentDiv.innerHTML = `<p class="error-message">Error: ${jsonData.error}</p>`;
-                            }
+                            if (jsonData.error) { contentDiv.innerHTML = `<p class="error-message">Error: ${jsonData.error}</p>`; }
                         } catch (e) { console.warn("Could not parse JSON from stream event:", event, e); }
                     }
                 }
                 chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
             }
             contentDiv.innerHTML = marked.parse(currentAnswer);
-            if (contentDiv.textContent === '...') {
-                contentDiv.textContent = "I'm sorry, but I couldn't find a relevant answer in the documents available to me.";
-            }
+            if (contentDiv.textContent === '...') { contentDiv.textContent = "I'm sorry, but I couldn't find a relevant answer in the documents available to me."; }
             chatHistory.push({ role: 'assistant', content: currentAnswer });
-            feedbackSection.classList.remove('hidden');
-            feedbackButtonsDiv.classList.remove('hidden');
-            feedbackMessage.textContent = '';
+            feedbackSection.classList.remove('hidden'); feedbackButtonsDiv.classList.remove('hidden'); feedbackMessage.textContent = '';
         } catch (error) {
             console.error('Chat error:', error);
             const { contentDiv } = appendMessage('assistant', `An error occurred: ${error.message}`);
             if (contentDiv) contentDiv.classList.add('error-message');
             currentAnswer = null;
         } finally {
-            chatInput.disabled = false;
-            sendChatButton.disabled = false;
-            sendChatButton.textContent = 'Send';
+            chatInput.disabled = false; sendChatButton.disabled = false; sendChatButton.textContent = 'Send';
         }
     };
 
     sendChatButton.addEventListener('click', handleSend);
-    chatInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); }
-    });
+    chatInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); } });
 
     async function handleFeedback(feedbackType) {
         if (!currentQuestion || !currentAnswer || !currentUserEmail) return;
-        feedbackMessage.textContent = '';
-        feedbackMessage.className = 'success-message';
+        feedbackMessage.textContent = ''; feedbackMessage.className = 'success-message';
         try {
-            const response = await fetch('/feedback/record', {
-                method: 'POST', headers: getAuthHeaders(),
-                body: JSON.stringify({ question: currentQuestion, answer: currentAnswer, feedback_type: feedbackType })
-            });
+            const response = await fetch('/feedback/record', getFetchOptions('POST', { question: currentQuestion, answer: currentAnswer, feedback_type: feedbackType }));
             if (!response.ok) throw new Error('Could not submit feedback.');
             feedbackMessage.textContent = 'Feedback received. Thank you!';
             feedbackButtonsDiv.classList.add('hidden');
-        } catch (error) {
-            feedbackMessage.textContent = `Error: ${error.message}`;
-            feedbackMessage.className = 'error-message';
-        }
+        } catch (error) { feedbackMessage.textContent = `Error: ${error.message}`; feedbackMessage.className = 'error-message'; }
     }
     helpfulButton.addEventListener('click', () => handleFeedback('👍'));
     notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
     async function fetchAndDisplayTickets() {
-        ticketsTableBody.innerHTML = '';
-        ticketsTableContainer.classList.add('hidden');
-        ticketsLoadingMessage.textContent = 'Loading tickets...';
-        ticketsLoadingMessage.className = '';
+        ticketsTableBody.innerHTML = ''; ticketsTableContainer.classList.add('hidden');
+        ticketsLoadingMessage.textContent = 'Loading tickets...'; ticketsLoadingMessage.className = '';
         ticketsLoadingMessage.classList.remove('hidden');
         try {
-            const response = await fetch('/admin/recent_tickets', { headers: getAuthHeaders() });
+            const response = await fetch('/admin/recent_tickets', getFetchOptions());
             const tickets = await response.json();
             if (!response.ok) { throw new Error(tickets.detail || 'Failed to fetch tickets.'); }
-            if (tickets.length === 0) {
-                ticketsLoadingMessage.textContent = 'No recent tickets found.';
-                return;
-            }
+            if (tickets.length === 0) { ticketsLoadingMessage.textContent = 'No recent tickets found.'; return; }
             tickets.forEach(ticket => {
                 const row = document.createElement('tr');
                 const timestamp = new Date(ticket.timestamp).toLocaleString();
                 row.innerHTML = `<td>${timestamp}</td><td>${ticket.user_email}</td><td class="ticket-question">${ticket.question}</td><td>${ticket.selected_team}</td><td>${ticket.status}</td>`;
                 ticketsTableBody.appendChild(row);
             });
-            ticketsLoadingMessage.classList.add('hidden');
-            ticketsTableContainer.classList.remove('hidden');
-        } catch (error) {
-            ticketsLoadingMessage.textContent = `Error: ${error.message}`;
-            ticketsLoadingMessage.className = 'error-message';
-        }
+            ticketsLoadingMessage.classList.add('hidden'); ticketsTableContainer.classList.remove('hidden');
+        } catch (error) { ticketsLoadingMessage.textContent = `Error: ${error.message}`; ticketsLoadingMessage.className = 'error-message'; }
     }
 
-    function openAdminModal() {
-        adminModal.classList.remove('hidden');
-        adminModalOverlay.classList.remove('hidden');
-        loadAdminPanelData();
-        fetchAndDisplayTickets();
-    }
-    function closeAdminModal() {
-        adminModal.classList.add('hidden');
-        adminModalOverlay.classList.add('hidden');
-    }
-
+    function openAdminModal() { adminModal.showModal(); loadAdminPanelData(); fetchAndDisplayTickets(); }
+    function closeAdminModal() { adminModal.close(); }
     openAdminPanelButton.addEventListener('click', openAdminModal);
     adminModalCloseBtn.addEventListener('click', closeAdminModal);
-    adminModalOverlay.addEventListener('click', closeAdminModal);
 
     adminNavButtons.forEach(button => {
         button.addEventListener('click', () => {
             const targetPanelId = button.dataset.panel;
-            adminNavButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-            adminPanels.forEach(panel => {
-                panel.classList.toggle('active', panel.id === targetPanelId);
-            });
-            if (targetPanelId === 'view-tickets-panel') {
-                fetchAndDisplayTickets();
-            }
+            adminNavButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active');
+            adminPanels.forEach(panel => { panel.classList.toggle('active', panel.id === targetPanelId); });
+            if (targetPanelId === 'view-tickets-panel') { fetchAndDisplayTickets(); }
         });
     });
 
     addRoleButton.addEventListener('click', () => {
-        const context = roleContextTagInput.value.trim().toUpperCase();
-        const role = roleNameTagInput.value.trim().toUpperCase();
+        const context = roleContextTagInput.value.trim().toUpperCase(); const role = roleNameTagInput.value.trim().toUpperCase();
         if (!context || !role) { alert('Both Context and Role Name must be filled.'); return; }
         if (!contextualRolesObject[context]) { contextualRolesObject[context] = []; }
         if (!contextualRolesObject[context].includes(role)) { contextualRolesObject[context].push(role); }
         contextualRolesPreview.textContent = JSON.stringify(contextualRolesObject, null, 2);
-        roleContextTagInput.value = ''; roleNameTagInput.value = '';
-        roleContextTagInput.focus();
+        roleContextTagInput.value = ''; roleNameTagInput.value = ''; roleContextTagInput.focus();
     });
 
     adminPermissionsForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        adminPermissionsMessage.textContent = '';
-        adminPermissionsMessage.className = 'error-message';
+        adminPermissionsMessage.textContent = ''; adminPermissionsMessage.className = 'error-message';
         const targetEmail = targetUserEmailInput.value.trim();
         if (!targetEmail) { adminPermissionsMessage.textContent = 'Target User Email is required.'; return; }
         const permissions = {};
@@ -369,36 +323,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Object.keys(contextualRolesObject).length > 0) { permissions.contextual_roles = contextualRolesObject; }
         if (Object.keys(permissions).length === 0) { adminPermissionsMessage.textContent = 'No changes detected. Please fill in at least one field to update.'; return; }
         try {
-            const response = await fetch('/admin/user_permissions', {
-                method: 'POST', headers: getAuthHeaders(),
-                body: JSON.stringify({ target_email: targetEmail, permissions })
-            });
+            const response = await fetch('/admin/user_permissions', getFetchOptions('POST', { target_email: targetEmail, permissions }));
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to update permissions.');
             adminPermissionsMessage.textContent = data.message || 'Permissions updated successfully!';
             adminPermissionsMessage.className = 'success-message';
-            adminPermissionsForm.reset(); contextualRolesObject = {};
-            contextualRolesPreview.textContent = '{}';
-            if (data.updated_profile) {
-                 adminPermissionsMessage.innerHTML += `<br>Updated Profile: <pre>${JSON.stringify(data.updated_profile, null, 2)}</pre>`;
-            }
+            adminPermissionsForm.reset(); contextualRolesObject = {}; contextualRolesPreview.textContent = '{}';
+            if (data.updated_profile) { adminPermissionsMessage.innerHTML += `<br>Updated Profile: <pre>${JSON.stringify(data.updated_profile, null, 2)}</pre>`; }
         } catch (error) { adminPermissionsMessage.textContent = `Error: ${error.message}`; }
     });
 
     viewPermissionsButton.addEventListener('click', async () => {
-        adminViewPermissionsMessage.textContent = '';
-        adminViewPermissionsMessage.className = 'error-message';
+        adminViewPermissionsMessage.textContent = ''; adminViewPermissionsMessage.className = 'error-message';
         userPermissionsDisplayDiv.classList.add('hidden');
         const targetEmailToView = viewTargetUserEmailInput.value.trim();
         if (!targetEmailToView) { adminViewPermissionsMessage.textContent = 'User Email to view is required.'; return; }
         try {
-            const response = await fetch(`/admin/view_user_permissions/${encodeURIComponent(targetEmailToView)}`, {
-                method: 'GET', headers: getAuthHeaders()
-            });
+            const response = await fetch(`/admin/view_user_permissions/${encodeURIComponent(targetEmailToView)}`, getFetchOptions());
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to fetch permissions.');
-            adminViewPermissionsMessage.textContent = 'Permissions fetched successfully.';
-            adminViewPermissionsMessage.className = 'success-message';
+            adminViewPermissionsMessage.textContent = 'Permissions fetched successfully.'; adminViewPermissionsMessage.className = 'success-message';
             displayUserEmailSpan.textContent = data.user_email || targetEmailToView;
             displayUserPermissionsJsonPre.textContent = JSON.stringify(data, null, 2);
             userPermissionsDisplayDiv.classList.remove('hidden');
@@ -406,16 +350,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     removeUserButton.addEventListener('click', async () => {
-        adminRemoveUserMessage.textContent = '';
-        adminRemoveUserMessage.className = 'error-message';
+        adminRemoveUserMessage.textContent = ''; adminRemoveUserMessage.className = 'error-message';
         const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
         if (!targetEmailToRemove) { adminRemoveUserMessage.textContent = 'User Email to remove is required.'; return; }
         if (!confirm(`Are you sure you want to remove the user '${targetEmailToRemove}'? This action cannot be undone.`)) { return; }
         try {
-            const response = await fetch('/admin/remove_user', {
-                method: 'POST', headers: getAuthHeaders(),
-                body: JSON.stringify({ target_email: targetEmailToRemove })
-            });
+            const response = await fetch('/admin/remove_user', getFetchOptions('POST', { target_email: targetEmailToRemove }));
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to remove user.');
             adminRemoveUserMessage.textContent = data.message || 'User removed successfully!';
@@ -428,9 +368,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ticketModal.classList.remove('hidden');
         ticketQuestionTextarea.value = currentQuestion || '';
         ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
-        if (ticketQuestionTextarea.value) {
-            ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-        } else { ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>'; }
+        if (ticketQuestionTextarea.value) { ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true })); }
+        else { ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>'; }
     });
 
     cancelTicketButton.addEventListener('click', () => { hideTicketModal(); });
@@ -444,10 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ticketTeamSelect.innerHTML = '<option value="">Loading teams...</option>';
         suggestTeamTimeout = setTimeout(async () => {
             try {
-                const response = await fetch('/tickets/suggest_team', {
-                    method: 'POST', headers: getAuthHeaders(),
-                    body: JSON.stringify({ question_text: questionText })
-                });
+                const response = await fetch('/tickets/suggest_team', getFetchOptions('POST', { question_text: questionText }));
                 const data = await response.json();
                 ticketTeamSelect.innerHTML = '';
                 if (!response.ok) throw new Error(data.detail || 'Unknown error');
@@ -465,16 +401,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     submitTicketButton.addEventListener('click', async () => {
-        const question_text = ticketQuestionTextarea.value.trim();
-        const selected_team = ticketTeamSelect.value;
-        ticketSubmissionMessage.textContent = '';
-        ticketSubmissionMessage.className = 'error-message';
+        const question_text = ticketQuestionTextarea.value.trim(); const selected_team = ticketTeamSelect.value;
+        ticketSubmissionMessage.textContent = ''; ticketSubmissionMessage.className = 'error-message';
         if (!question_text || !selected_team) { ticketSubmissionMessage.textContent = 'Question and team selection are required.'; return; }
         try {
-            const response = await fetch('/tickets/create', {
-                method: 'POST', headers: getAuthHeaders(),
-                body: JSON.stringify({ question_text: question_text, chat_history_json: JSON.stringify(chatHistory.slice(-5)), selected_team: selected_team })
-            });
+            const body = { question_text: question_text, chat_history_json: JSON.stringify(chatHistory.slice(-5)), selected_team: selected_team };
+            const response = await fetch('/tickets/create', getFetchOptions('POST', body));
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Could not create ticket.');
             ticketSubmissionMessage.textContent = 'Ticket created successfully!';
@@ -483,19 +415,49 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { ticketSubmissionMessage.textContent = `Error: ${error.message}`; }
     });
     
-    function initApp() {
-        if (jwtToken && currentUserProfile) {
-            console.log("Resuming session for:", currentUserProfile.user_email);
-            profileEmail.textContent = currentUserProfile.user_email;
-            showChat();
-            const ADMIN_LEVEL = 3;
-            if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
-                adminControlsArea.classList.remove('hidden');
-            } else {
-                adminControlsArea.classList.add('hidden');
+    // --- UPDATED: Application Initialization ---
+    async function initApp() {
+        // This function now checks for a valid session cookie with the backend
+        // instead of just trusting localStorage.
+        try {
+            // Send the cookie to the backend to check if the session is still valid.
+            const response = await fetch('/auth/me', getFetchOptions('POST'));
+            
+            if (!response.ok) {
+                // If the response is not OK (e.g., 401 Unauthorized), the cookie is invalid or expired.
+                throw new Error("No valid session.");
             }
-        } else { showLogin(); }
-    }
+            
+            const data = await response.json();
+            currentUserProfile = data.user_profile;
 
+            if (currentUserProfile) {
+                console.log("Session validated. Resuming for:", currentUserProfile.user_email);
+                // We can still use localStorage for the *current* session's convenience but
+                // it's populated with fresh data from the server.
+                localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(currentUserProfile));
+                currentUserEmail = currentUserProfile.user_email;
+
+                profileEmail.textContent = currentUserEmail;
+                showChat();
+                if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
+                    adminControlsArea.classList.remove('hidden');
+                } else {
+                    adminControlsArea.classList.add('hidden');
+                }
+            } else {
+                throw new Error("Profile not found in session response.");
+            }
+        } catch (error) {
+            console.log("Initialization check failed:", error.message);
+            // Clear any potentially stale data and show the login page
+            localStorage.removeItem('knowledgeAssistantProfile');
+            currentUserEmail = null;
+            currentUserProfile = null;
+            showLogin();
+        }
+    }
+    
+    // Run the initialization logic when the page loads
     initApp();
 });

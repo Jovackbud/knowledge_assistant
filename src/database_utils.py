@@ -31,7 +31,7 @@ def init_auth_db():
     - contextual_roles (JSON dict: {"context_tag": ["ROLE_1", "ROLE_2"]})
       Context_tag can be a project_tag or a department_tag.
     """
-    with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
+    with sqlite3.connect(AUTH_DB_PATH, timeout=10, check_same_thread=False) as conn:
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS UserAccessProfile (
@@ -47,7 +47,7 @@ def init_auth_db():
 
 
 def init_ticket_db():
-    with sqlite3.connect(TICKET_DB_PATH, timeout=10) as conn:
+    with sqlite3.connect(TICKET_DB_PATH, timeout=10, check_same_thread=False) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
         cursor.execute('''
@@ -68,7 +68,7 @@ def init_ticket_db():
 
 
 def init_feedback_db():
-    with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10) as conn:
+    with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10, check_same_thread=False) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
         cursor.execute('''
@@ -89,7 +89,7 @@ def init_feedback_db():
 def save_ticket(user_email: str, question: str, chat_history: str,
                 suggested_team: str, selected_team: str) -> Optional[int]:
     try:
-        with sqlite3.connect(TICKET_DB_PATH, timeout=10) as conn:
+        with sqlite3.connect(TICKET_DB_PATH, timeout=10, check_same_thread=False) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO tickets
@@ -110,7 +110,7 @@ def save_ticket(user_email: str, question: str, chat_history: str,
 
 def save_feedback(user_email: str, question: str, answer: str, rating: str) -> bool:
     try:
-        with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10) as conn:
+        with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10, check_same_thread=False) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO feedback (user_email, question, answer, rating)
@@ -138,7 +138,7 @@ def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool
         projects_membership_json = json.dumps(projects_membership_list)
         contextual_roles_json = json.dumps(contextual_roles_dict)
 
-        with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
+        with sqlite3.connect(AUTH_DB_PATH, timeout=10, check_same_thread=False) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT OR REPLACE INTO UserAccessProfile
@@ -161,7 +161,7 @@ def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool
 
 def get_user_profile(email: str) -> Optional[Dict[str, Any]]:
     try:
-        with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
+        with sqlite3.connect(AUTH_DB_PATH, timeout=10, check_same_thread=False) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM UserAccessProfile WHERE user_email = ?", (email,))
@@ -255,7 +255,7 @@ def _create_sample_users_if_not_exist():
 def delete_user_profile(email: str) -> bool:
     """Deletes a user profile and all associated data via cascading deletes."""
     try:
-        with sqlite3.connect(AUTH_DB_PATH, timeout=10) as conn:
+        with sqlite3.connect(AUTH_DB_PATH, timeout=10, check_same_thread=False) as conn:
             cursor = conn.cursor()
             # The ON DELETE CASCADE for foreign keys in tickets and feedback tables
             # should handle associated data deletion automatically.
@@ -285,7 +285,7 @@ def get_recent_tickets(limit: int = 20) -> List[Dict[str, Any]]:
     """
     tickets = []
     try:
-        with sqlite3.connect(TICKET_DB_PATH, timeout=10) as conn:
+        with sqlite3.connect(TICKET_DB_PATH, timeout=10, check_same_thread=False) as conn:
             conn.row_factory = sqlite3.Row  # This allows accessing columns by name
             cursor = conn.cursor()
             # Fetch the most recent tickets first
