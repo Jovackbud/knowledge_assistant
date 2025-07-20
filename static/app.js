@@ -1,5 +1,7 @@
+// static/app.js
+
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Element Selectors ---
+    // --- Element Selectors (No changes needed here) ---
     const loginSection = document.getElementById('login-section');
     const userProfileSection = document.getElementById('user-profile-section');
     const chatSection = document.getElementById('chat-section');
@@ -51,9 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- State Variables ---
-    let currentUserEmail = null;
-    let currentUserProfile = null;
-    let jwtToken = null;
+    // --- UPDATED FOR JWT PERSISTENCE ---
+    // Try to load user profile and token from localStorage on startup.
+    let currentUserProfile = JSON.parse(localStorage.getItem('knowledgeAssistantProfile')) || null;
+    let jwtToken = localStorage.getItem('knowledgeAssistantToken') || null;
+    let currentUserEmail = currentUserProfile ? currentUserProfile.user_email : null;
+    
+    // Other state variables remain the same
     let currentQuestion = null;
     let currentAnswer = null;
     let chatHistory = [];
@@ -104,41 +110,48 @@ document.addEventListener('DOMContentLoaded', () => {
         teamSuggestionP.textContent = '';
         ticketTeamSelect.innerHTML = '';
     }
-
+    
     function appendMessage(role, text) {
         const messageDiv = document.createElement('div');
-        messageDiv.classList.add('chat-message');
+        messageDiv.classList.add('chat-message', `${role}-message`);
         
         if (role === 'user') {
-            messageDiv.classList.add('user-message');
             messageDiv.textContent = text;
             chatHistoryDiv.appendChild(messageDiv);
             chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
             return {};
         }
-
-        messageDiv.classList.add('assistant-message');
+    
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('assistant-message-content');
-        contentDiv.textContent = text;
+        contentDiv.innerHTML = text;
         
         const sourcesDiv = document.createElement('div');
         sourcesDiv.classList.add('sources-container', 'hidden');
-
+    
         messageDiv.appendChild(contentDiv);
         messageDiv.appendChild(sourcesDiv);
-
+    
         chatHistoryDiv.appendChild(messageDiv);
         chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+    
         return { contentDiv, sourcesDiv };
     }
 
-    // --- Event Listeners ---
+    chatInput.addEventListener('input', () => {
+        chatInput.style.height = 'auto';
+        const scrollHeight = chatInput.scrollHeight;
+        chatInput.style.height = `${Math.min(scrollHeight, 150)}px`;
+    });
 
+
+    // --- Event Listeners ---
     loginButton.addEventListener('click', async () => {
         const email = emailInput.value.trim();
         if (!email) { loginError.textContent = 'Please enter your email.'; return; }
         loginError.textContent = '';
+        loginButton.disabled = true;
+        loginButton.textContent = 'Logging in...';
         try {
             const response = await fetch('/auth/login', {
                 method: 'POST',
@@ -149,11 +162,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(data.detail || 'Login failed');
             
             jwtToken = data.access_token;
+            currentUserProfile = data.user_profile;
+            currentUserEmail = data.user_profile.user_email;
 
-            if (data.user_profile && data.user_profile.user_email) {
-                currentUserProfile = data.user_profile;
-                currentUserEmail = data.user_profile.user_email;
+            // --- UPDATED FOR JWT PERSISTENCE ---
+            // Save the token and profile to localStorage
+            localStorage.setItem('knowledgeAssistantToken', jwtToken);
+            localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(currentUserProfile));
 
+            if (currentUserProfile) {
                 profileEmail.textContent = currentUserEmail;
                 showChat();
                 emailInput.value = '';
@@ -175,10 +192,19 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUserEmail = null; 
             currentUserProfile = null;
             jwtToken = null;
+        } finally {
+            loginButton.disabled = false;
+            loginButton.textContent = 'Login';
         }
     });
 
     logoutButton.addEventListener('click', () => {
+        // --- UPDATED FOR JWT PERSISTENCE ---
+        // Clear the token and profile from localStorage
+        localStorage.removeItem('knowledgeAssistantToken');
+        localStorage.removeItem('knowledgeAssistantProfile');
+
+        // Reset all state variables
         currentUserEmail = null;
         currentUserProfile = null;
         jwtToken = null;
@@ -187,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory = [];
         contextualRolesObject = {};
         
+        // Reset UI
         chatHistoryDiv.innerHTML = '';
         profileEmail.textContent = '';
         adminPermissionsForm.reset();
@@ -207,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    sendChatButton.addEventListener('click', async () => {
+    const handleSend = async () => {
         const prompt = chatInput.value.trim();
         if (!prompt || !currentUserEmail) {
             console.error("Exiting: Prompt is empty or user is not logged in properly.");
@@ -218,12 +245,12 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.push({ role: 'user', content: prompt });
         currentQuestion = prompt;
         chatInput.value = '';
+        chatInput.style.height = 'auto'; // Reset textarea height
         feedbackSection.classList.add('hidden');
 
-        // --- SUGGESTION 5: Disable inputs during generation ---
         chatInput.disabled = true;
         sendChatButton.disabled = true;
-        sendChatButton.textContent = 'Thinking...';
+        sendChatButton.textContent = '...';
 
         try {
             const response = await fetch('/rag/chat', {
@@ -231,88 +258,92 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
                     prompt: prompt,
-                    // --- SUGGESTION 6: Limit chat history to last 8 messages (4 turns) ---
                     chat_history: chatHistory.slice(-9, -1)
                 })
             });
-
+        
             if (!response.ok || !response.body) {
                 const errData = await response.json();
-                throw new Error(errData.detail || 'Failed to get response.');
+                throw new Error(errData.detail || 'Failed to get a valid response from the server.');
             }
-
+        
             const { contentDiv, sourcesDiv } = appendMessage('assistant', '...');
             currentAnswer = '';
-
+        
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            
+            let buffer = '';
+        
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
-                
-                const lines = decoder.decode(value, { stream: true }).split('\n').filter(line => line.startsWith('data: '));
-                for (const line of lines) {
-                    try {
-                        const jsonData = JSON.parse(line.substring(5));
-                        if (jsonData.answer_chunk) {
-                            if (currentAnswer === '' && contentDiv.textContent === '...') currentAnswer = '';
-                            currentAnswer += jsonData.answer_chunk;
-                            contentDiv.textContent = currentAnswer;
+        
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop(); 
+        
+                for (const event of events) {
+                    if (event.startsWith('data: ')) {
+                        try {
+                            const jsonData = JSON.parse(event.substring(6));
+                            
+                            if (jsonData.answer_chunk) {
+                                if (contentDiv.textContent === '...') contentDiv.textContent = '';
+                                currentAnswer += jsonData.answer_chunk;
+                                contentDiv.innerHTML = marked.parse(currentAnswer + ' ▌');
+                            }
+                            if (jsonData.sources) {
+                                sourcesDiv.classList.remove('hidden');
+                                const sourceList = jsonData.sources.map(source => `<li class="source-item">${source}</li>`).join('');
+                                sourcesDiv.innerHTML = `<strong>Sources:</strong><ul>${sourceList}</ul>`;
+                            }
+                            if (jsonData.error) {
+                                contentDiv.innerHTML = `<p class="error-message">Error: ${jsonData.error}</p>`;
+                            }
+                        } catch (e) {
+                            console.warn("Could not parse JSON from stream event:", event, e);
                         }
-                        if (jsonData.sources) {
-                            sourcesDiv.classList.remove('hidden');
-                            sourcesDiv.innerHTML = '<strong>Sources:</strong>';
-                            const sourceList = document.createElement('ul');
-                            jsonData.sources.forEach(source => {
-                                const li = document.createElement('li');
-                                li.classList.add('source-item');
-                                li.textContent = source;
-                                sourceList.appendChild(li);
-                            });
-                            sourcesDiv.appendChild(sourceList);
-                        }
-                        if (jsonData.error) {
-                            contentDiv.textContent = jsonData.error;
-                            contentDiv.style.color = 'red';
-                        }
-                    } catch (e) {
-                        console.warn("Could not parse JSON chunk from stream:", line);
                     }
                 }
                 chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
             }
-
-            // --- SUGGESTION 5: Re-enable inputs on success ---
-            chatInput.disabled = false;
-            sendChatButton.disabled = false;
-            sendChatButton.textContent = 'Send';
-
-            if (contentDiv.textContent === '...') contentDiv.textContent = "Sorry, I couldn't find an answer.";
             
+            contentDiv.innerHTML = marked.parse(currentAnswer);
+            
+            if (contentDiv.textContent === '...') {
+                contentDiv.textContent = "I'm sorry, but I couldn't find a relevant answer in the documents available to me.";
+            }
+        
             chatHistory.push({ role: 'assistant', content: currentAnswer });
             feedbackSection.classList.remove('hidden');
             feedbackButtonsDiv.classList.remove('hidden');
             feedbackMessage.textContent = '';
-
+        
         } catch (error) {
             console.error('Chat error:', error);
             const { contentDiv } = appendMessage('assistant', `An error occurred: ${error.message}`);
-            if(contentDiv) contentDiv.style.color = 'red';
+            contentDiv.classList.add('error-message');
             currentAnswer = null;
             
-            // --- SUGGESTION 5: Re-enable inputs on error ---
+        } finally {
             chatInput.disabled = false;
             sendChatButton.disabled = false;
             sendChatButton.textContent = 'Send';
         }
+    };
+
+    sendChatButton.addEventListener('click', handleSend);
+    chatInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            handleSend();
+        }
     });
-    
-    chatInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { sendChatButton.click(); } });
 
     async function handleFeedback(feedbackType) {
         if (!currentQuestion || !currentAnswer || !currentUserEmail) return;
         feedbackMessage.textContent = '';
+        feedbackMessage.className = 'success-message';
         try {
             const response = await fetch('/feedback/record', {
                 method: 'POST',
@@ -324,25 +355,19 @@ document.addEventListener('DOMContentLoaded', () => {
             feedbackButtonsDiv.classList.add('hidden');
         } catch (error) {
             feedbackMessage.textContent = `Error: ${error.message}`;
+            feedbackMessage.className = 'error-message';
         }
     }
     helpfulButton.addEventListener('click', () => handleFeedback('👍'));
     notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
-    // --- Admin Panel Listeners ---
+    // --- Admin Panel Listeners (No changes needed here) ---
     addRoleButton.addEventListener('click', () => {
         const context = roleContextTagInput.value.trim().toUpperCase();
         const role = roleNameTagInput.value.trim().toUpperCase();
-        if (!context || !role) {
-            alert('Both Context and Role Name must be filled.');
-            return;
-        }
-        if (!contextualRolesObject[context]) {
-            contextualRolesObject[context] = [];
-        }
-        if (!contextualRolesObject[context].includes(role)) {
-            contextualRolesObject[context].push(role);
-        }
+        if (!context || !role) { alert('Both Context and Role Name must be filled.'); return; }
+        if (!contextualRolesObject[context]) { contextualRolesObject[context] = []; }
+        if (!contextualRolesObject[context].includes(role)) { contextualRolesObject[context].push(role); }
         contextualRolesPreview.textContent = JSON.stringify(contextualRolesObject, null, 2);
         roleContextTagInput.value = '';
         roleNameTagInput.value = '';
@@ -352,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
     adminPermissionsForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         adminPermissionsMessage.textContent = ''; 
-        adminPermissionsMessage.style.color = 'red';
+        adminPermissionsMessage.className = 'error-message';
         const targetEmail = targetUserEmailInput.value.trim();
         if (!targetEmail) { adminPermissionsMessage.textContent = 'Target User Email is required.'; return; }
 
@@ -361,18 +386,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hierarchyLevel !== '') permissions.user_hierarchy_level = parseInt(hierarchyLevel, 10);
         
         const departmentsStr = targetDepartmentsInput.value.trim();
-        if (departmentsStr !== '') permissions.departments = departmentsStr.split(',').map(d => d.trim()).filter(Boolean);
+        if (departmentsStr !== '') permissions.departments = departmentsStr.split(',').map(d => d.trim().toUpperCase()).filter(Boolean);
 
         const projectsStr = targetProjectsInput.value.trim();
-        if (projectsStr !== '') permissions.projects_membership = projectsStr.split(',').map(p => p.trim()).filter(Boolean);
+        if (projectsStr !== '') permissions.projects_membership = projectsStr.split(',').map(p => p.trim().toUpperCase()).filter(Boolean);
         
-        if (Object.keys(contextualRolesObject).length > 0) {
-            permissions.contextual_roles = contextualRolesObject;
-        }
-
-        if (Object.keys(permissions).length === 0) {
-            adminPermissionsMessage.textContent = 'No changes detected. Please fill in at least one field to update.'; return;
-        }
+        if (Object.keys(contextualRolesObject).length > 0) { permissions.contextual_roles = contextualRolesObject; }
+        if (Object.keys(permissions).length === 0) { adminPermissionsMessage.textContent = 'No changes detected. Please fill in at least one field to update.'; return; }
         
         try {
             const response = await fetch('/admin/user_permissions', {
@@ -384,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(data.detail || 'Failed to update permissions.');
             
             adminPermissionsMessage.textContent = data.message || 'Permissions updated successfully!';
-            adminPermissionsMessage.style.color = 'green';
+            adminPermissionsMessage.className = 'success-message';
             adminPermissionsForm.reset();
             contextualRolesObject = {};
             contextualRolesPreview.textContent = '{}';
@@ -399,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     viewPermissionsButton.addEventListener('click', async () => {
         adminViewPermissionsMessage.textContent = ''; 
-        adminViewPermissionsMessage.style.color = 'red';
+        adminViewPermissionsMessage.className = 'error-message';
         userPermissionsDisplayDiv.classList.add('hidden');
         const targetEmailToView = viewTargetUserEmailInput.value.trim();
         if (!targetEmailToView) { adminViewPermissionsMessage.textContent = 'User Email to view is required.'; return; }
@@ -411,7 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(data.detail || 'Failed to fetch permissions.');
             
             adminViewPermissionsMessage.textContent = 'Permissions fetched successfully.';
-            adminViewPermissionsMessage.style.color = 'green';
+            adminViewPermissionsMessage.className = 'success-message';
             displayUserEmailSpan.textContent = data.user_email || targetEmailToView;
             displayUserPermissionsJsonPre.textContent = JSON.stringify(data, null, 2); 
             userPermissionsDisplayDiv.classList.remove('hidden');
@@ -422,7 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     removeUserButton.addEventListener('click', async () => {
         adminRemoveUserMessage.textContent = ''; 
-        adminRemoveUserMessage.style.color = 'red';
+        adminRemoveUserMessage.className = 'error-message';
         const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
         if (!targetEmailToRemove) { adminRemoveUserMessage.textContent = 'User Email to remove is required.'; return; }
         if (!confirm(`Are you sure you want to remove the user '${targetEmailToRemove}'? This action cannot be undone.`)) { return; }
@@ -435,18 +455,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to remove user.');
             adminRemoveUserMessage.textContent = data.message || 'User removed successfully!';
-            adminRemoveUserMessage.style.color = 'green';
+            adminRemoveUserMessage.className = 'success-message';
             removeTargetUserEmailInput.value = ''; 
         } catch (error) {
             adminRemoveUserMessage.textContent = `Error: ${error.message}`;
         }
     });
 
-    // --- Ticket System Listeners ---
+    // --- Ticket System Listeners (No changes needed here) ---
     openTicketModalButton.addEventListener('click', () => {
         ticketModal.classList.remove('hidden');
         ticketQuestionTextarea.value = currentQuestion || ''; 
-        ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
+        ticketSubmissionMessage.textContent = ''; 
+        teamSuggestionP.textContent = '';
         if (ticketQuestionTextarea.value) {
             ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true }));
         } else {
@@ -493,7 +514,8 @@ document.addEventListener('DOMContentLoaded', () => {
     submitTicketButton.addEventListener('click', async () => {
         const question_text = ticketQuestionTextarea.value.trim();
         const selected_team = ticketTeamSelect.value;
-        ticketSubmissionMessage.textContent = ''; ticketSubmissionMessage.style.color = 'red';
+        ticketSubmissionMessage.textContent = ''; 
+        ticketSubmissionMessage.className = 'error-message';
         if (!question_text || !selected_team) { ticketSubmissionMessage.textContent = 'Question and team selection are required.'; return; }
         
         try {
@@ -510,13 +532,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(data.detail || 'Could not create ticket.');
             
             ticketSubmissionMessage.textContent = 'Ticket created successfully!';
-            ticketSubmissionMessage.style.color = 'green';
+            ticketSubmissionMessage.className = 'success-message';
             setTimeout(hideTicketModal, 2000);
         } catch (error) {
             ticketSubmissionMessage.textContent = `Error: ${error.message}`;
         }
     });
     
-    // Initial UI State
-    showLogin();
+    // --- UPDATED FOR JWT PERSISTENCE ---
+    // Create an initialization function to check for an existing session
+    function initApp() {
+        if (jwtToken && currentUserProfile) {
+            console.log("Resuming session for:", currentUserProfile.user_email);
+            // Populate UI elements with data from the resumed session
+            profileEmail.textContent = currentUserProfile.user_email;
+            
+            // Show the correct view
+            showChat();
+
+            // Check for admin privileges and show admin panel if necessary
+            const ADMIN_LEVEL = 3; 
+            if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
+                adminControlsArea.classList.remove('hidden');
+                toggleAdminPanelButton.textContent = 'Show Admin Panel';
+            } else {
+                adminControlsArea.classList.add('hidden');
+                adminPermissionsSection.classList.add('hidden');
+            }
+        } else {
+            // If there's no token or profile, show the login screen
+            showLogin();
+        }
+    }
+
+    // Run the initialization function when the app loads
+    initApp();
 });

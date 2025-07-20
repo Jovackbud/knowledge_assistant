@@ -2,6 +2,7 @@
 import logging
 import json
 import os
+import re
 from pathlib import Path
 from operator import itemgetter
 from typing import Dict, Any, List, Optional
@@ -46,6 +47,14 @@ class RAGService:
             with open(system_prompt_path, "r", encoding="utf-8") as f:
                 system_prompt_content = f.read()
             logger.info(f"Successfully loaded system prompt from {system_prompt_path}")
+
+            # --- NEW: Load the rephrasing prompt ---
+            rephrase_prompt_path = prompts_dir / "rephrase_question_prompt.md"
+            with open(rephrase_prompt_path, "r", encoding="utf-8") as f:
+                rephrase_prompt_content = f.read()
+            self.rephrase_prompt = ChatPromptTemplate.from_template(rephrase_prompt_content)
+            logger.info(f"Successfully loaded rephrasing prompt from {rephrase_prompt_path}")
+
         except FileNotFoundError:
             logger.error(f"FATAL: System prompt file not found at {system_prompt_path}. Please ensure it exists.")
             raise
@@ -97,7 +106,10 @@ class RAGService:
             raise
 
     def get_rag_chain(self, user_profile: Optional[Dict[str, Any]], chat_history: List[Dict[str, str]]):
-        """Constructs the complete RAG chain with permission-aware retrieval and reranking."""
+        """
+        Constructs a complete, history-aware RAG chain.
+        This version first rephrases the question based on history, then retrieves, reranks, and finally answers.
+        """
 
         # 2. Define the base retriever that applies a user-specific permission filter.
         base_retriever = self.vector_store.as_retriever(
@@ -204,57 +216,66 @@ class RAGService:
         # We return the components separately to be handled by the API endpoint
         return retrieval_and_rerank_chain, answer_chain
     
+    def _sanitize_tag(self, tag: str) -> str:
+        """
+        Normalizes a tag by removing all non-alphanumeric characters
+        and converting it to uppercase.
+        e.g., "Project-Beta" -> "PROJECTBETA"
+        """
+        if not isinstance(tag, str):
+            return ""
+        return re.sub(r'[^a-zA-Z0-9]', '', tag).upper()
+    
     def _build_filter_expression(self, profile: Dict[str, Any]) -> Dict:
         """
         Builds a metadata filter expression for Pinecone based on user profile.
-        This corrected version properly aggregates all user roles for all their contexts.
+        This version sanitizes all tags to be purely alphanumeric and uppercase
+        to ensure robust, case-insensitive, and character-insensitive matching.
         """
         user_level = profile.get("user_hierarchy_level", -1)
         user_depts = profile.get("departments", [])
         user_projs = profile.get("projects_membership", [])
         user_contextual_roles = profile.get("contextual_roles", {})
 
+        # --- Sanitize all tags from the user's profile for comparison ---
+        user_depts_sanitized = [self._sanitize_tag(d) for d in user_depts]
+        user_projs_sanitized = [self._sanitize_tag(p) for p in user_projs]
+        
+        # Also sanitize the keys in the contextual roles dictionary
+        sanitized_contextual_roles = {self._sanitize_tag(k): v for k, v in user_contextual_roles.items()}
+
         # --- Base condition: User's hierarchy level must be sufficient ---
         hierarchy_filter = {"hierarchy_level_required": {"$lte": user_level}}
 
-        # --- Document access rules ---
-        # A document is accessible if it meets one of the following criteria:
-        # 1. It's a GENERAL department document and user has the required role.
-        # 2. It's a department-specific document and user is in that dept with the required role.
-        # 3. It's a GENERAL project document and user has the required role.
-        # 4. It's a project-specific document and user is in that project with the required role.
-        
-        # Gather all roles the user has across all their departments
-        all_dept_roles = set(user_contextual_roles.get(DEFAULT_DEPARTMENT_TAG, []))
-        for dept in user_depts:
-            all_dept_roles.update(user_contextual_roles.get(dept.upper(), []))
+        # --- Gather all roles based on SANITIZED tags ---
+        # Note: DEFAULT_DEPARTMENT_TAG and DEFAULT_PROJECT_TAG are already clean
+        all_dept_roles = set(sanitized_contextual_roles.get(self._sanitize_tag(DEFAULT_DEPARTMENT_TAG), []))
+        for dept in user_depts_sanitized:
+            all_dept_roles.update(sanitized_contextual_roles.get(dept, []))
         all_dept_roles.add(DEFAULT_ROLE_TAG)
 
-        # Gather all roles the user has across all their projects
-        all_proj_roles = set(user_contextual_roles.get(DEFAULT_PROJECT_TAG, []))
-        for proj in user_projs:
-            all_proj_roles.update(user_contextual_roles.get(proj.upper(), []))
+        all_proj_roles = set(sanitized_contextual_roles.get(self._sanitize_tag(DEFAULT_PROJECT_TAG), []))
+        for proj in user_projs_sanitized:
+            all_proj_roles.update(sanitized_contextual_roles.get(proj, []))
         all_proj_roles.add(DEFAULT_ROLE_TAG)
-
-        # Build the final logic
+        
+        # Build the final logic using the sanitized lists.
+        # We assume that the tags in Pinecone's metadata have ALREADY been sanitized
+        # during the document update process.
         final_filter = {
             "$and": [
                 hierarchy_filter,
                 {
                     "$or": [
-                        # User can access if it's a doc from a department they belong to (or GENERAL)...
                         {
                             "$and": [
-                                {"department_tag": {"$in": user_depts + [DEFAULT_DEPARTMENT_TAG]}},
-                                # ...and they have the required role for that context.
+                                {"department_tag": {"$in": user_depts_sanitized + [self._sanitize_tag(DEFAULT_DEPARTMENT_TAG)]}},
                                 {"role_tag_required": {"$in": list(all_dept_roles)}}
                             ]
                         },
-                        # OR if it's a doc from a project they belong to (or GENERAL)...
                         {
                             "$and": [
-                                {"project_tag": {"$in": user_projs + [DEFAULT_PROJECT_TAG]}},
-                                # ...and they have the required role for that context.
+                                {"project_tag": {"$in": user_projs_sanitized + [self._sanitize_tag(DEFAULT_PROJECT_TAG)]}},
                                 {"role_tag_required": {"$in": list(all_proj_roles)}}
                             ]
                         }

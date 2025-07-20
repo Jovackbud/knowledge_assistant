@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 from pathlib import Path
@@ -7,7 +8,6 @@ import boto3
 from botocore.exceptions import ClientError
 from pinecone.exceptions import NotFoundException
 
-# Replace the old import with this one
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import Pinecone as PineconeVectorStore
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
@@ -27,56 +27,66 @@ logger = logging.getLogger("DocumentUpdater")
 s3_client = boto3.client("s3")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
+
+def _sanitize_tag(tag: str) -> str:
+    """Normalizes a tag to be alphanumeric and uppercase."""
+    if not isinstance(tag, str): return ""
+    return re.sub(r'[^a-zA-Z0-9]', '', tag).upper()
+
+def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
+    """
+    Looks for a 'metadata.json' file in the current directory or any parent directory.
+    This allows for inherited permissions.
+    """
+    current_dir = start_path
+    # Iterate up the directory tree until we hit the root
+    while current_dir != current_dir.parent:
+        metadata_file = current_dir / "metadata.json"
+        try:
+            # Check S3 if this file exists
+            response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=str(metadata_file).replace('\\', '/'))
+            metadata_content = response['Body'].read().decode('utf-8')
+            return json.loads(metadata_content)
+        except (ClientError, json.JSONDecodeError):
+            # If not found or invalid json, go to the parent directory
+            current_dir = current_dir.parent
+    return None
+
 def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
     """
-    Extracts metadata from a relative file path (S3 key) based on configured conventions.
+    Extracts metadata by finding and loading a 'metadata.json' manifest file
+    from the document's directory or a parent directory in S3/R2.
     """
     path_obj = Path(relative_path)
-    parts = list(path_obj.parts[:-1])
+    # The starting point for the search is the directory containing the file
+    search_dir = path_obj.parent
+
+    # Define the default metadata structure
     metadata = {
         "department_tag": DEFAULT_DEPARTMENT_TAG,
         "project_tag": DEFAULT_PROJECT_TAG,
         "hierarchy_level_required": DEFAULT_HIERARCHY_LEVEL,
         "role_tag_required": DEFAULT_ROLE_TAG,
     }
-    known_dept_tags_lower = [tag.lower() for tag in KNOWN_DEPARTMENT_TAGS]
-    role_folder_tags_lower = {key.lower(): value for key, value in ROLE_SPECIFIC_FOLDER_TAGS.items()}
-    project_candidates = []
 
-    for part in parts:
-        part_lower = part.lower()
-        if metadata["department_tag"] == DEFAULT_DEPARTMENT_TAG and part_lower in known_dept_tags_lower:
-            idx = known_dept_tags_lower.index(part_lower)
-            metadata["department_tag"] = KNOWN_DEPARTMENT_TAGS[idx].upper()
-            continue
-        if metadata["role_tag_required"] == DEFAULT_ROLE_TAG and part_lower in role_folder_tags_lower:
-            metadata["role_tag_required"] = role_folder_tags_lower[part_lower].upper()
-            continue
-        
-        parsed_hierarchy = parse_hierarchy_from_folder_name(part)
-        if parsed_hierarchy is not None and (metadata["hierarchy_level_required"] == DEFAULT_HIERARCHY_LEVEL or parsed_hierarchy > metadata["hierarchy_level_required"]):
-            metadata["hierarchy_level_required"] = parsed_hierarchy
+    # Find the explicit metadata from a manifest file
+    manifest_data = find_metadata_file(search_dir)
 
-        if part_lower not in ["docs", "files", "general", "confidential", "private", "shared"] and len(part) > 2 and not (part_lower in known_dept_tags_lower or part_lower in role_folder_tags_lower or parsed_hierarchy is not None):
-            project_candidates.append(part)
+    if manifest_data:
+        # If a manifest is found, update the defaults with its values.
+        # This is safer as it only updates keys that are explicitly provided.
+        # Use the sanitize function on every tag read from the manifest
+        metadata["department_tag"] = _sanitize_tag(manifest_data.get("department_tag", metadata["department_tag"]))
+        metadata["project_tag"] = _sanitize_tag(manifest_data.get("project_tag", metadata["project_tag"]))
+        metadata["hierarchy_level_required"] = manifest_data.get("hierarchy_level_required", metadata["hierarchy_level_required"])
+        metadata["role_tag_required"] = _sanitize_tag(manifest_data.get("role_tag_required", metadata["role_tag_required"]))
+        logger.info(f"Loaded and sanitized metadata for '{relative_path}'. Data: {metadata}")
+    else:
+        logger.warning(f"No 'metadata.json' found in the path for '{relative_path}'. "
+                       f"Falling back to default metadata. This may restrict access unexpectedly.")
 
-    if project_candidates and metadata["project_tag"] == DEFAULT_PROJECT_TAG.upper():
-        metadata["project_tag"] = project_candidates[0].upper()
-    if metadata["department_tag"] != DEFAULT_DEPARTMENT_TAG.upper() and metadata["department_tag"] == metadata["project_tag"]:
-        metadata["project_tag"] = DEFAULT_PROJECT_TAG.upper()
-    if metadata["project_tag"] != DEFAULT_PROJECT_TAG.upper() and metadata["department_tag"] == DEFAULT_DEPARTMENT_TAG.upper():
-        metadata["department_tag"] = metadata["project_tag"]
-        
     return metadata
 
-def parse_hierarchy_from_folder_name(folder_name_segment: str) -> Optional[int]:
-    """Helper to parse hierarchy level from a folder name segment."""
-    if not folder_name_segment: return None
-    segment_upper = folder_name_segment.upper()
-    for key, level in HIERARCHY_LEVELS_CONFIG.items():
-        if key.upper() in segment_upper and f"_{level}_" in segment_upper:
-            return level
-    return None
 
 def get_document_loader(file_path: str, ext: str):
     """Initializes a document loader based on file extension."""
@@ -165,7 +175,7 @@ def synchronize_documents():
     logger.info("Starting document synchronization from S3/R2 to Pinecone...")
     try:
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        vector_store = PineconeVectorStore(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
+        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
         logger.info(f"Successfully connected to Pinecone index '{PINECONE_INDEX_NAME}'.")
 
         current_s3_state = scan_s3_bucket()

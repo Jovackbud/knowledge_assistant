@@ -1,4 +1,0 @@
-This document is placed directly in the root documents folder.
-According to the defined rules, it should receive 'restricted' access metadata.
-Only users or filter logic explicitly designed to access 'restricted' category documents should be able to retrieve this content.
-It serves as a test case for the default fallback permissioning.

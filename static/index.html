@@ -4,58 +4,139 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI4AI Knowledge Assistant</title>
-    <link rel="icon" type="image/png" href="/static/icon.png">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; color: #333; }
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        h1, h2 { color: #2c3e50; }
-        .hidden { display: none; }
-        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-creation-trigger, #admin-permissions-section { 
-            margin-bottom: 20px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; 
+        :root {
+            --bg-color: #f8f9fa;
+            --container-bg: #ffffff;
+            --text-color: #212529;
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --secondary-color: #6c757d;
+            --secondary-hover: #5a6268;
+            --danger-color: #dc3545;
+            --danger-hover: #c82333;
+            --border-color: #dee2e6;
+            --input-bg: #ffffff;
+            --message-user-bg: #e9f5ff;
+            --message-assistant-bg: #f1f3f5;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
-        #chat-history { height: 400px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #fdfdfd; border-radius: 5px; }
-        .chat-message { margin-bottom: 12px; line-height: 1.5; }
-        .user-message { text-align: right; color: #0056b3; }
-        .assistant-message { text-align: left; color: #212529; }
-        .assistant-message-content { white-space: pre-wrap; word-wrap: break-word; }
-        .sources-container { font-size: 0.85em; color: #555; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #ccc; }
-        .sources-container strong { color: #333; }
-        .source-item { margin-left: 18px; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; color: #495057; }
-        input, textarea, select { 
-            width: calc(100% - 24px); padding: 10px; margin-bottom: 12px; 
-            border: 1px solid #ccc; border-radius: 4px; font-size: 1em;
+        body {
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
-        button { 
-            padding: 10px 15px; background-color: #007bff; color: white; 
-            border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; font-weight: 600;
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: var(--container-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 20px;
         }
-        button:hover { background-color: #0056b3; }
+        h1, h2, h3, legend { color: #343a40; }
+        h1 { text-align: center; margin-bottom: 2rem; }
+        .hidden { display: none !important; }
+
+        section, .section {
+            margin-bottom: 1.5rem;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        
+        #chat-history {
+            height: 450px;
+            border: 1px solid var(--border-color);
+            overflow-y: auto;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background-color: var(--bg-color);
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .chat-message {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            line-height: 1.6;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: var(--message-user-bg);
+            align-self: flex-end;
+            text-align: left;
+        }
+        .assistant-message {
+            background-color: var(--message-assistant-bg);
+            align-self: flex-start;
+        }
+        .assistant-message-content p:first-child { margin-top: 0; }
+        .assistant-message-content p:last-child { margin-bottom: 0; }
+        .assistant-message-content ul, .assistant-message-content ol { padding-left: 20px; }
+        .sources-container {
+            font-size: 0.85em;
+            color: #555;
+            margin-top: 1rem;
+            padding-top: 0.75rem;
+            border-top: 1px dashed var(--border-color);
+        }
+        .sources-container strong { color: var(--text-color); }
+        .sources-container ul { list-style-type: none; padding-left: 0; margin-top: 0.5rem; }
+        .source-item { font-family: monospace; background-color: #e9ecef; padding: 2px 6px; border-radius: 4px; display: inline-block; margin: 2px; }
+
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #495057; }
+        input, textarea, select {
+            width: calc(100% - 24px);
+            padding: 10px;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1em;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+        }
+        #chat-input-area { display: flex; gap: 0.5rem; }
+        #chat-input { flex-grow: 1; margin-bottom: 0; }
+        
+        button {
+            padding: 10px 15px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: var(--primary-hover); }
         button:disabled { background-color: #a0c7ff; cursor: not-allowed; }
-        #feedback-buttons button { background-color: #6c757d; }
-        #feedback-buttons button:hover { background-color: #545b62; }
-        #ticket-modal { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            background-color: white; padding: 30px; box-shadow: 0 5px 20px rgba(0,0,0,0.25); 
-            z-index: 1000; border-radius: 8px; border-top: 5px solid #007bff;
-        }
-        #ticket-form-container { width: 450px; }
-        pre { 
-            white-space: pre-wrap; word-wrap: break-word; background-color: #f0f0f0; 
-            padding: 10px; border-radius: 4px; font-size: 0.9em;
-        }
-        #admin-controls-area { margin-top: 20px; padding-top:15px; border-top: 1px solid #eee; }
+        
+        .btn-secondary { background-color: var(--secondary-color); }
+        .btn-secondary:hover { background-color: var(--secondary-hover); }
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-danger:hover { background-color: var(--danger-hover); }
         #toggleAdminPanelButton { background-color: #ffc107; color: #212529; }
         #toggleAdminPanelButton:hover { background-color: #e0a800; }
-        .contextual-roles-builder { display: flex; align-items: center; gap: 10px; }
-        .contextual-roles-builder input { flex-grow: 1; }
-        .contextual-roles-builder button { flex-shrink: 0; }
+        
+        .error-message { color: var(--danger-color); font-weight: bold; }
+        .success-message { color: #198754; font-weight: bold; }
+
+        #ticket-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background-color: var(--container-bg); padding: 2rem;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.25);
+            z-index: 1000; border-radius: 8px; border-top: 5px solid var(--primary-color);
+            width: 90%; max-width: 500px;
+        }
+        
         fieldset { border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 5px; }
         legend { font-weight: 700; font-size: 1.1em; padding: 0 10px; color: #333; }
-        .btn-danger { background-color: #dc3545; }
-        .btn-danger:hover { background-color: #c82333; }
-        .btn-secondary { background-color: #6c757d; }
-        .btn-secondary:hover { background-color: #5a6268; }
+        pre { white-space: pre-wrap; word-wrap: break-word; background-color: #e9ecef; padding: 10px; border-radius: 4px; font-size: 0.9em; }
         small { color: #6c757d; font-style: italic; }
     </style>
 </head>
@@ -63,36 +144,33 @@
     <div class="container">
         <h1>AI4AI Knowledge Assistant</h1>
 
-        <!-- Login Section -->
-        <div id="login-section">
+        <section id="login-section">
             <h2>Login</h2>
             <label for="email">Work Email:</label>
             <input type="email" id="email" placeholder="user@example.com">
             <button id="loginButton">Login</button>
-            <p id="login-error" style="color: red;"></p>
-        </div>
+            <p id="login-error" class="error-message"></p>
+        </section>
 
-        <!-- User Profile Section (hidden by default) -->
-        <div id="user-profile-section" class="hidden">
-            <h2>User Profile</h2>
-            <p><strong>Email:</strong> <span id="profile-email"></span></p>
-            <button id="logoutButton">Logout</button>
-
-            <div id="admin-controls-area" class="hidden">
+        <section id="user-profile-section" class="hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2>User Profile</h2>
+                    <p><strong>Email:</strong> <span id="profile-email"></span></p>
+                </div>
+                <button id="logoutButton" class="btn-secondary">Logout</button>
+            </div>
+            <div id="admin-controls-area" class="hidden" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
                 <button id="toggleAdminPanelButton">Show Admin Panel</button>
             </div>
-        </div>
+        </section>
 
-        <!-- Admin Permissions Section (hidden by default AND toggled) -->
-        <div id="admin-permissions-section" class="hidden">
+        <section id="admin-permissions-section" class="hidden">
             <h2>Admin Panel</h2>
-            
             <fieldset>
                 <legend>View User Permissions</legend>
-                <div>
-                    <label for="view-target-user-email">User Email to View:</label>
-                    <input type="email" id="view-target-user-email" required>
-                </div>
+                <label for="view-target-user-email">User Email to View:</label>
+                <input type="email" id="view-target-user-email">
                 <button type="button" id="viewPermissionsButton">View Permissions</button>
                 <div id="admin-view-permissions-message" style="margin-top: 10px;"></div>
                 <div id="user-permissions-display" class="hidden" style="margin-top: 10px;">
@@ -104,93 +182,82 @@
             <fieldset>
                 <legend>Manage User Permissions</legend>
                 <form id="admin-permissions-form">
-                    <div>
-                        <label for="target-user-email">Target User Email:</label>
-                        <input type="email" id="target-user-email" required>
-                        <small style="display: block; margin-bottom: 10px;">(Creates a new user if email doesn't exist, or updates an existing one.)</small>
-                    </div>
-                    <div>
-                        <label for="target-hierarchy-level">New Hierarchy Level:</label>
-                        <input type="number" id="target-hierarchy-level" placeholder="(e.g., 0, 1, 2, 3 - leave blank for no change)">
-                    </div>
-                    <div>
-                        <label for="target-departments">Departments (comma-separated):</label>
-                        <input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (leave blank for no change)">
-                        <datalist id="known-departments-list"></datalist>
-                    </div>
-                    <div>
-                        <label for="target-projects">Projects (comma-separated):</label>
-                        <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (leave blank for no change)">
-                    </div>
+                    <label for="target-user-email">Target User Email:</label>
+                    <input type="email" id="target-user-email" required>
+                    <small style="display: block; margin-top: -0.5rem; margin-bottom: 1rem;">(Creates a new user or updates an existing one.)</small>
                     
-                    <div>
-                        <label>Contextual Roles:</label>
-                        <div class="contextual-roles-builder">
-                            <input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)">
-                            <input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)">
-                            <button type="button" id="addRoleButton">Add Role</button>
-                        </div>
-                        <label>Current Roles to Add/Update:</label>
-                        <pre id="contextual-roles-preview">{}</pre>
-                        <small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small>
+                    <label for="target-hierarchy-level">New Hierarchy Level:</label>
+                    <input type="number" id="target-hierarchy-level" placeholder="e.g., 0, 1, 2, 3 (blank for no change)">
+                    
+                    <label for="target-departments">Departments (comma-separated):</label>
+                    <input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (blank for no change)">
+                    <datalist id="known-departments-list"></datalist>
+                    
+                    <label for="target-projects">Projects (comma-separated):</label>
+                    <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (blank for no change)">
+                    
+                    <label>Contextual Roles:</label>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.5rem;">
+                        <input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)" style="margin-bottom: 0;">
+                        <input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)" style="margin-bottom: 0;">
+                        <button type="button" id="addRoleButton" style="flex-shrink: 0;">Add Role</button>
                     </div>
+                    <label>Current Roles to Add/Update:</label>
+                    <pre id="contextual-roles-preview">{}</pre>
+                    <small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small>
 
-                    <button type="submit">Update User Permissions</button>
+                    <button type="submit" style="margin-top: 1rem;">Update User Permissions</button>
                 </form>
                 <div id="admin-permissions-message" style="margin-top: 10px;"></div>
             </fieldset>
 
             <fieldset>
                 <legend>Remove User</legend>
-                <div>
-                    <label for="remove-target-user-email">User Email to Remove:</label>
-                    <input type="email" id="remove-target-user-email" required>
-                </div>
+                <label for="remove-target-user-email">User Email to Remove:</label>
+                <input type="email" id="remove-target-user-email">
                 <button type="button" id="removeUserButton" class="btn-danger">Remove User</button>
                 <div id="admin-remove-user-message" style="margin-top: 10px;"></div>
             </fieldset>
-        </div>
+        </section>
 
-        <!-- Chat Section (hidden by default) -->
-        <div id="chat-section" class="hidden">
+        <section id="chat-section" class="hidden">
             <h2>Chat</h2>
             <div id="chat-history"></div>
-            <input type="text" id="chat-input" placeholder="Ask your question...">
-            <button id="sendChatButton">Send</button>
-        </div>
+            <div id="chat-input-area">
+                <textarea id="chat-input" placeholder="Ask your question..." rows="1"></textarea>
+                <button id="sendChatButton">Send</button>
+            </div>
+        </section>
 
-        <!-- Feedback Section (hidden by default, shown after an answer) -->
-        <div id="feedback-section" class="hidden">
+        <section id="feedback-section" class="hidden" style="text-align: center;">
             <h3>Was this answer helpful?</h3>
             <div id="feedback-buttons">
                 <button id="helpfulButton">👍 Helpful</button>
                 <button id="notHelpfulButton">👎 Not Helpful</button>
             </div>
-            <p id="feedback-message" style="color: green;"></p>
-        </div>
+            <p id="feedback-message" class="success-message"></p>
+        </section>
 
-        <!-- Ticket Creation Button (hidden by default) -->
-        <div id="ticket-creation-trigger" class="hidden">
-            <hr style="margin-top: 25px;">
+        <div id="ticket-creation-trigger" class="hidden" style="text-align: center;">
+            <hr style="margin-top: 2rem; margin-bottom: 1rem;">
             <button id="openTicketModalButton">Create Support Ticket</button>
         </div>
         
-        <!-- Ticket Modal (hidden by default) -->
         <div id="ticket-modal" class="hidden">
-            <div id="ticket-form-container">
-                <h2>New Support Ticket</h2>
-                <label for="ticket-question">Your Question/Issue:</label>
-                <textarea id="ticket-question" rows="4"></textarea>
-                <label for="ticket-team">Select a Team:</label>
-                <select id="ticket-team"></select>
-                <p id="team-suggestion" style="font-style: italic; color: #555; margin-top: -5px; margin-bottom: 10px;"></p>
-                <button id="submitTicketButton">Submit Ticket</button>
-                <button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button>
-                <p id="ticket-submission-message" style="margin-top: 10px;"></p>
-            </div>
+            <h2>New Support Ticket</h2>
+            <label for="ticket-question">Your Question/Issue:</label>
+            <textarea id="ticket-question" rows="4"></textarea>
+            <label for="ticket-team">Select a Team:</label>
+            <select id="ticket-team"></select>
+            <p id="team-suggestion" style="font-style: italic; color: #555; margin-top: -0.5rem; margin-bottom: 1rem;"></p>
+            <button id="submitTicketButton">Submit Ticket</button>
+            <button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button>
+            <p id="ticket-submission-message" style="margin-top: 1rem;"></p>
         </div>
     </div>
 
+    <!-- Add Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

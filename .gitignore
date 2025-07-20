@@ -23,4 +23,5 @@ venv
 
 database/
 milvus/
+sample_docs/
 test_reranker.py
