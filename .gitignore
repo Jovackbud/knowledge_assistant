@@ -15,6 +15,7 @@ venv
 
 #GCP credentials
 *json
+knowledge-assistant-gcp_credentials.json
 
 # Logs
 *.log

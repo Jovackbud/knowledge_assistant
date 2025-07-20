@@ -1,26 +1,31 @@
 services:
-  # A name for your service on Render
+  # Your existing web service
   - name: knowledge-assistant-app
-    # The type of service to create
     type: web
-    # Tell Render to build and run this service from a Dockerfile
     env: docker
-    
-    # Enable auto-deploys from the main branch of your repo
     autoDeploy: true
-    branch: main # Or whichever branch you use for production
-
-    # Health check to ensure zero-downtime deploys
-    # Render will wait for this to return a 200 OK before switching traffic.
+    branch: main
     healthCheck:
       path: /
-      # Give the app plenty of time to load models on first start
       initialDelaySeconds: 180
-
-    # Define a persistent disk to store your SQLite databases and sync state.
-    # This ensures your data is not lost when the service restarts or redeploys.
     disks:
       - name: app-data
-        # This mount path must match the WORKDIR in your Dockerfile + the directory name
         mountPath: /usr/src/app/database
         sizeGB: 1
+    # Define your SYNC_SECRET_TOKEN in the Render dashboard under Environment.
+    # It should be a long, random string. You can generate one with:
+    # openssl rand -hex 32
+    # Example: envVars:
+    #   - key: SYNC_SECRET_TOKEN
+    #     value: your_super_secret_random_string_here
+
+  # NEW CRON JOB SERVICE
+  - name: document-synchronizer
+    type: cron
+    # This schedule runs the job every 15 minutes.
+    schedule: "*/15 * * * *"
+    # The command to run. It calls our new endpoint with the secret token.
+    # The -f flag makes it fail silently if there's a server error,
+    # which prevents Render from sending you unnecessary error alerts.
+    # The ${RENDER_EXTERNAL_URL} is a variable provided automatically by Render.
+    command: curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents

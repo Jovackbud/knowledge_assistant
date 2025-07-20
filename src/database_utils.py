@@ -249,7 +249,6 @@ def _create_sample_users_if_not_exist():
     logger.info("Checking for and creating sample users if they don't exist...")
     for email, data in sample_users.items():
         if not get_user_profile(email):
-            # We no longer need to import from config here, simplifying dependencies
             add_or_update_user_profile(email, data)
             logger.info(f"Created sample user: {email}")
 
@@ -271,3 +270,30 @@ def delete_user_profile(email: str) -> bool:
     except Exception as e:
         logger.error(f"Profile deletion failed for {email}: {e}", exc_info=True)
         return False
+    
+
+
+def get_recent_tickets(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Fetches the most recent tickets from the database.
+
+    Args:
+        limit: The maximum number of tickets to retrieve.
+
+    Returns:
+        A list of dictionaries, where each dictionary represents a ticket.
+    """
+    tickets = []
+    try:
+        with sqlite3.connect(TICKET_DB_PATH, timeout=10) as conn:
+            conn.row_factory = sqlite3.Row  # This allows accessing columns by name
+            cursor = conn.cursor()
+            # Fetch the most recent tickets first
+            cursor.execute("SELECT * FROM tickets ORDER BY timestamp DESC LIMIT ?", (limit,))
+            rows = cursor.fetchall()
+            # Convert sqlite3.Row objects to standard dictionaries
+            tickets = [dict(row) for row in rows]
+        logger.info(f"Successfully fetched {len(tickets)} recent tickets.")
+    except Exception as e:
+        logger.error(f"Failed to fetch recent tickets: {e}", exc_info=True)
+    return tickets
