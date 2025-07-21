@@ -1,8 +1,9 @@
 services:
-  # Your existing web service
+  # Main web service for the application
   - name: knowledge-assistant-app
     type: web
     env: docker
+    plan: free
     autoDeploy: true
     branch: main
     healthCheck:
@@ -12,20 +13,11 @@ services:
       - name: app-data
         mountPath: /usr/src/app/database
         sizeGB: 1
-    # Define your SYNC_SECRET_TOKEN in the Render dashboard under Environment.
-    # It should be a long, random string. You can generate one with:
-    # openssl rand -hex 32
-    # Example: envVars:
-    #   - key: SYNC_SECRET_TOKEN
-    #     value: your_super_secret_random_string_here
 
-  # NEW CRON JOB SERVICE
+  # Cron job service to synchronize documents
   - name: document-synchronizer
     type: cron
-    # This schedule runs the job every 15 minutes.
+    plan: free
     schedule: "*/15 * * * *"
-    # The command to run. It calls our new endpoint with the secret token.
-    # The -f flag makes it fail silently if there's a server error,
-    # which prevents Render from sending you unnecessary error alerts.
-    # The ${RENDER_EXTERNAL_URL} is a variable provided automatically by Render.
-    command: curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents
+    # The command is wrapped in single quotes to avoid YAML parsing issues
+    command: 'curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents'
