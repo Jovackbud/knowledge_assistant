@@ -12,7 +12,7 @@ services:
     disks:
       - name: app-data
         mountPath: /usr/src/app/database
-        sizeGB: 1
+        sizeGB: 0.2
 
   # Cron job service to synchronize documents
   - name: document-synchronizer
