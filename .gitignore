@@ -50,5 +50,3 @@ Thumbs.db
 
 # Notebook outputs (optional if you prefer clean diffs)
 *.ipynb
-".env" 
-".env.*" 

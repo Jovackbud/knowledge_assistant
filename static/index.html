@@ -3,184 +3,264 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Knowledge Assistant</title>
-    <link rel="icon" type="image/png" href="/static/icon.png">
+    <title>AI4AI Knowledge Assistant</title>
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .hidden { display: none; }
-        #login-section, #user-profile-section, #chat-section, #feedback-section, #ticket-section, 
-        #admin-permissions-section { 
-            margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; 
+        :root {
+            --bg-color: #f8f9fa;
+            --container-bg: #ffffff;
+            --text-color: #212529;
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --secondary-color: #6c757d;
+            --secondary-hover: #5a6268;
+            --danger-color: #dc3545;
+            --danger-hover: #c82333;
+            --border-color: #dee2e6;
+            --input-bg: #ffffff;
+            --message-user-bg: #e9f5ff;
+            --message-assistant-bg: #f1f3f5;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
-        #chat-history { height: 300px; border: 1px solid #ccc; overflow-y: auto; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; }
-        .chat-message { margin-bottom: 10px; }
-        .user-message { text-align: right; color: #007bff; }
-        .assistant-message { text-align: left; color: #28a745; }
-        .assistant-message-content { white-space: pre-wrap; word-wrap: break-word; }
-        .sources-container { font-size: 0.8em; color: #666; margin-top: 10px; padding-top: 5px; border-top: 1px dashed #ccc; }
-        .sources-container strong { color: #444; }
-        .source-item { margin-left: 15px; }
-        label { display: block; margin-bottom: 5px; }
-        input, textarea, select { 
-            width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; 
-            border: 1px solid #ccc; border-radius: 4px; 
+        body {
+            font-family: var(--font-family); margin: 0; padding: 20px;
+            background-color: var(--bg-color); color: var(--text-color);
         }
-        button { 
-            padding: 10px 15px; background-color: #007bff; color: white; 
-            border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; 
+        .container {
+            width: 90%; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            background-color: var(--container-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+            box-sizing: border-box; 
         }
-        button:hover { background-color: #0056b3; }
-        #feedback-buttons button { background-color: #6c757d; }
-        #feedback-buttons button:hover { background-color: #545b62; }
-        #ticket-modal { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            background-color: white; padding: 20px; box-shadow: 0 0 15px rgba(0,0,0,0.2); 
-            z-index: 1000; border-radius: 8px; 
+        .hidden { display: none !important; }
+        h2, legend { color: #343a40; }
+        
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1rem;
         }
-        #ticket-form-container { width: 400px; }
-        pre { 
-            white-space: pre-wrap; word-wrap: break-word; background-color: #efefef; 
-            padding: 10px; border-radius: 3px; font-size: 0.9em;
+        .app-header h1 {
+            font-size: 1.5em;
+            margin: 0;
         }
-        #admin-controls-area { margin-top: 15px; padding-top:10px; border-top: 1px solid #eee; }
-        #toggleAdminPanelButton { background-color: #ffc107; color: #212529; }
-        #toggleAdminPanelButton:hover { background-color: #e0a800; }
-        .contextual-roles-builder { display: flex; align-items: center; gap: 10px; }
-        .contextual-roles-builder input { flex-grow: 1; }
-        .contextual-roles-builder button { flex-shrink: 0; }
+        .header-user-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.9em;
+        }
+        .header-user-controls p { margin: 0; font-weight: 500; } /* Added font-weight for visibility */
+        #openAdminPanelButton, #openTicketModalButton { padding: 6px 12px; }
+        #openAdminPanelButton { background-color: #ffc107; color: #212529; }
+        #openAdminPanelButton:hover { background-color: #e0a800; }
+        #logoutButton { padding: 6px 12px; }
+
+        section {
+            margin-bottom: 1rem;
+        }
+        #chat-section {
+            flex-grow: 1; 
+            display: flex;
+            flex-direction: column;
+            min-height: 0; 
+        }
+        #chat-history {
+            flex-grow: 1;
+            border: 1px solid var(--border-color); overflow-y: auto;
+            padding: 1rem; margin-bottom: 1rem; background-color: var(--bg-color);
+            border-radius: 5px; display: flex; flex-direction: column; gap: 1rem;
+        }
+        .chat-message { padding: 0.75rem 1rem; border-radius: 12px; line-height: 1.6; max-width: 85%; word-wrap: break-word; }
+        .user-message { background-color: var(--message-user-bg); align-self: flex-end; text-align: left; }
+        .assistant-message { background-color: var(--message-assistant-bg); align-self: flex-start; }
+        .assistant-message-content p:first-child { margin-top: 0; }
+        .assistant-message-content p:last-child { margin-bottom: 0; }
+        .assistant-message-content ul, .assistant-message-content ol { padding-left: 20px; }
+        .sources-container { font-size: 0.85em; color: #555; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color); }
+        .sources-container strong { color: var(--text-color); }
+        .sources-container ul { list-style-type: none; padding-left: 0; margin-top: 0.5rem; }
+        .source-item { font-family: monospace; background-color: #e9ecef; padding: 2px 6px; border-radius: 4px; display: inline-block; margin: 2px; }
+        
+        #chat-input-area { display: flex; gap: 0.5rem; }
+        #chat-input { flex-grow: 1; margin-bottom: 0; }
+        textarea, select {
+            width: calc(100% - 24px); padding: 10px; border: 1px solid var(--border-color);
+            border-radius: 4px; font-size: 1em; background-color: var(--input-bg); color: var(--text-color);
+            box-sizing: border-box;
+        }
+        select { width: 100%; }
+
+        #post-chat-actions {
+            display: flex;
+            justify-content: flex-start; 
+            align-items: center;
+            padding: 0.75rem 0;
+            border-top: 1px solid var(--border-color);
+            margin-top: -1rem; 
+        }
+        #feedback-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        #feedback-controls h3 {
+            margin: 0;
+            font-size: 1em;
+            font-weight: normal;
+        }
+        #feedback-buttons { display: flex; gap: 0.5rem; }
+        
+        #login-section { padding: 2rem; border: 1px solid var(--border-color); border-radius: 8px; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #495057; }
+        input {
+            width: calc(100% - 24px); padding: 10px; margin-bottom: 1rem; border: 1px solid var(--border-color);
+            border-radius: 4px; font-size: 1em; background-color: var(--input-bg); color: var(--text-color);
+        }
+        button {
+            padding: 10px 15px; background-color: var(--primary-color); color: white;
+            border: none; border-radius: 4px; cursor: pointer; font-weight: 600; transition: background-color 0.2s;
+        }
+        button:hover { background-color: var(--primary-hover); }
+        button:disabled { background-color: #a0c7ff; cursor: not-allowed; }
+        .btn-secondary { background-color: var(--secondary-color); }
+        .btn-secondary:hover { background-color: var(--secondary-hover); }
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-danger:hover { background-color: var(--danger-hover); }
+        .error-message { color: var(--danger-color); font-weight: bold; }
+        .success-message { color: #198754; font-weight: bold; }
+
+        #ticket-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background-color: var(--container-bg); padding: 2rem; box-shadow: 0 5px 20px rgba(0,0,0,0.25);
+            z-index: 1000; border-radius: 8px; border-top: 5px solid var(--primary-color);
+            width: 90%; max-width: 500px;
+        }
+        fieldset { border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 5px; }
+        pre { white-space: pre-wrap; word-wrap: break-word; background-color: #e9ecef; padding: 10px; border-radius: 4px; font-size: 0.9em; }
+        small { color: #6c757d; font-style: italic; }
+        dialog {
+            border: none; box-shadow: 0 8px 30px rgba(0,0,0,0.2); border-radius: 8px;
+            padding: 0; width: 90%; max-width: 900px; height: 80vh; max-height: 700px;
+        }
+        dialog::backdrop { background-color: rgba(0, 0, 0, 0.6); }
+        .admin-modal-container { display: flex; flex-direction: column; height: 100%; }
+        .admin-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); }
+        .admin-modal-header h2 { margin: 0; }
+        .admin-modal-close-btn { font-size: 1.5rem; font-weight: bold; border: none; background: none; cursor: pointer; color: var(--secondary-color); }
+        .admin-modal-body { display: flex; flex-grow: 1; overflow: hidden; }
+        .admin-modal-nav { flex: 0 0 200px; padding: 1rem; border-right: 1px solid var(--border-color); background-color: var(--bg-color); }
+        .admin-nav-button { display: block; width: 100%; text-align: left; padding: 0.75rem 1rem; margin-bottom: 0.5rem; border: none; background-color: transparent; color: var(--text-color); font-size: 1rem; border-radius: 4px; }
+        .admin-nav-button.active, .admin-nav-button:hover { background-color: var(--primary-color); color: white; }
+        .admin-modal-content { flex-grow: 1; padding: 1.5rem; overflow-y: auto; }
+        .admin-panel { display: none; }
+        .admin-panel.active { display: block; }
+        .tickets-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .tickets-table th, .tickets-table td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; }
+        .tickets-table thead { background-color: var(--bg-color); }
+        .tickets-table td.ticket-question { max-width: 300px; white-space: pre-wrap; word-break: break-word; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Company Knowledge Assistant</h1>
+        <!-- Compact Header -->
+        <header class="app-header">
+            <h1>AI4AI Knowledge Assistant</h1>
+            <div id="user-profile-controls" class="header-user-controls hidden">
+                <!-- THE FIX IS HERE: Removed "Email:" text and strong tag -->
+                <p><span id="profile-email"></span></p>
+                <button id="openTicketModalButton">Create Support Ticket</button>
+                <div id="admin-controls-area" class="hidden"><button id="openAdminPanelButton">Admin Panel</button></div>
+                <button id="logoutButton" class="btn-secondary">Logout</button>
+            </div>
+        </header>
 
-        <!-- Login Section -->
-        <div id="login-section">
+        <section id="login-section">
             <h2>Login</h2>
             <label for="email">Work Email:</label>
             <input type="email" id="email" placeholder="user@example.com">
             <button id="loginButton">Login</button>
-            <p id="login-error" style="color: red;"></p>
-        </div>
-
-        <!-- User Profile Section (hidden by default) -->
-        <div id="user-profile-section" class="hidden">
-            <h2>User Profile</h2>
-            <p><strong>Email:</strong> <span id="profile-email"></span></p>
-            <button id="logoutButton">Logout</button>
-
-            <div id="admin-controls-area" class="hidden">
-                <button id="toggleAdminPanelButton">Show Admin Panel</button>
-            </div>
-        </div>
-
-        <!-- Admin Permissions Section (hidden by default AND toggled) -->
-        <div id="admin-permissions-section" class="hidden">
-            <h2>Admin Panel</h2>
-            <hr style="margin-bottom: 20px;">
-            
-            <h3>View User Permissions</h3>
-            <div>
-                <label for="view-target-user-email">User Email to View:</label>
-                <input type="email" id="view-target-user-email" required>
-            </div>
-            <button type="button" id="viewPermissionsButton">View Permissions</button>
-            <div id="admin-view-permissions-message" style="margin-top: 10px;"></div>
-            <div id="user-permissions-display" style="margin-top: 10px; padding: 10px; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 4px;" class="hidden">
-                <h4>Permissions for <span id="display-user-email"></span>:</h4>
-                <pre id="display-user-permissions-json"></pre>
-            </div>
-            <hr style="margin-top: 20px; margin-bottom: 20px;">
-
-            <h3>Manage User Permissions</h3>
-            <form id="admin-permissions-form">
-                <div>
-                    <label for="target-user-email">Target User Email:</label>
-                    <input type="email" id="target-user-email" required>
-                    <small style="display: block; margin-bottom: 10px;">(Creates new user if email doesn't exist, or updates existing user.)</small>
-                </div>
-                <div>
-                    <label for="target-hierarchy-level">New Hierarchy Level:</label>
-                    <input type="number" id="target-hierarchy-level" placeholder="(leave blank for no change)">
-                </div>
-                <div>
-                    <label for="target-departments">Departments (comma-separated):</label>
-                    <input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (leave blank for no change)">
-                    <datalist id="known-departments-list"></datalist>
-                </div>
-                <div>
-                    <label for="target-projects">Projects (comma-separated):</label>
-                    <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (leave blank for no change)">
-                </div>
-                
-                <div>
-                    <label>Contextual Roles:</label>
-                    <div class="contextual-roles-builder">
-                        <input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)">
-                        <input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)">
-                        <button type="button" id="addRoleButton">Add Role</button>
-                    </div>
-                    <label>Current Roles to Add/Update:</label>
-                    <pre id="contextual-roles-preview">{}</pre>
-                    <small>(Building roles here will overwrite existing roles for this user upon submission.)</small>
-                </div>
-
-                <button type="submit" id="updatePermissionsButton">Update User Permissions</button>
-            </form>
-            <div id="admin-permissions-message" style="margin-top: 10px;"></div>
-            <hr style="margin-top: 20px; margin-bottom: 20px;">
-
-            <h3>Remove User</h3>
-            <div>
-                <label for="remove-target-user-email">User Email to Remove:</label>
-                <input type="email" id="remove-target-user-email" required>
-            </div>
-            <button type="button" id="removeUserButton" style="background-color: #dc3545; color: white;">Remove User</button>
-            <div id="admin-remove-user-message" style="margin-top: 10px;"></div>
-        </div>
-
-        <!-- Chat Section (hidden by default) -->
-        <div id="chat-section" class="hidden">
-            <h2>Chat</h2>
-            <div id="chat-history"></div>
-            <input type="text" id="chat-input" placeholder="Ask your question...">
-            <button id="sendChatButton">Send</button>
-        </div>
-
-        <!-- Feedback Section (hidden by default, shown after an answer) -->
-        <div id="feedback-section" class="hidden">
-            <h3>Was this answer helpful?</h3>
-            <div id="feedback-buttons">
-                <button id="helpfulButton">👍 Helpful</button>
-                <button id="notHelpfulButton">👎 Not Helpful</button>
-            </div>
-            <p id="feedback-message" style="color: green;"></p>
-        </div>
-
-        <!-- Ticket Creation Button (hidden by default) -->
-        <div id="ticket-creation-trigger" class="hidden">
-            <hr>
-            <button id="openTicketModalButton">Create Support Ticket</button>
-        </div>
+            <p id="login-error" class="error-message"></p>
+        </section>
         
-        <!-- Ticket Modal (hidden by default) -->
-        <div id="ticket-modal" class="hidden">
-            <div id="ticket-form-container">
-                <h2>New Support Ticket</h2>
-                <label for="ticket-question">Issue/Question:</label>
-                <textarea id="ticket-question" rows="3"></textarea>
-                <label for="ticket-team">Team:</label>
-                <select id="ticket-team"></select>
-                <p id="team-suggestion"></p>
-                <button id="submitTicketButton">Submit Ticket</button>
-                <button id="cancelTicketButton">Cancel</button>
-                <p id="ticket-submission-message" style="color: green;"></p>
+        <section id="chat-section" class="hidden">
+            <div id="chat-history"></div>
+            <div id="chat-input-area">
+                <textarea id="chat-input" placeholder="Ask your question..." rows="1"></textarea>
+                <button id="sendChatButton">Send</button>
             </div>
+        </section>
+
+        <!-- Post-Chat Action Bar -->
+        <section id="post-chat-actions" class="hidden">
+            <div id="feedback-controls">
+                <h3>Was this answer helpful?</h3>
+                <div id="feedback-buttons">
+                    <button id="helpfulButton">👍</button>
+                    <button id="notHelpfulButton">👎</button>
+                </div>
+                <p id="feedback-message" class="success-message"></p>
+            </div>
+        </section>
+        
+        <!-- Ticket Modal -->
+        <div id="ticket-modal" class="hidden">
+            <h2>New Support Ticket</h2>
+            <label for="ticket-question">Your Question/Issue:</label>
+            <textarea id="ticket-question" rows="4"></textarea>
+            <label for="ticket-team">Select a Team:</label>
+            <select id="ticket-team"></select> 
+            <p id="team-suggestion" style="font-style: italic; color: #555; margin-top: -0.5rem; margin-bottom: 1rem;"></p>
+            <button id="submitTicketButton">Submit Ticket</button>
+            <button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button>
+            <p id="ticket-submission-message" style="margin-top: 1rem;"></p>
         </div>
     </div>
 
-    <!-- The script is now loaded from an external file -->
-    <script src="/static/app.js"></script>
+    <!-- Admin Modal -->
+    <dialog id="admin-modal">
+        <div class="admin-modal-container">
+            <div class="admin-modal-header">
+                <h2>Admin Panel</h2>
+                <button id="admin-modal-close-btn" class="admin-modal-close-btn" aria-label="Close Admin Panel">×</button>
+            </div>
+            <div class="admin-modal-body">
+                <nav class="admin-modal-nav">
+                    <button class="admin-nav-button active" data-panel="view-tickets-panel">View Tickets</button>
+                    <button class="admin-nav-button" data-panel="view-permissions-panel">View Permissions</button>
+                    <button class="admin-nav-button" data-panel="manage-permissions-panel">Manage Permissions</button>
+                    <button class="admin-nav-button" data-panel="remove-user-panel">Remove User</button>
+                </nav>
+                <main class="admin-modal-content">
+                    <div id="view-tickets-panel" class="admin-panel active">
+                        <fieldset><legend>Recent Support Tickets</legend>
+                            <p id="tickets-loading-message">Loading tickets...</p>
+                            <div id="tickets-table-container" class="hidden">
+                                <table class="tickets-table">
+                                    <thead><tr><th>Timestamp</th><th>User</th><th>Question</th><th>Selected Team</th><th>Status</th></tr></thead>
+                                    <tbody id="tickets-table-body"></tbody>
+                                </table>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div id="view-permissions-panel" class="admin-panel"><fieldset><legend>View User Permissions</legend><label for="view-target-user-email">User Email to View:</label><input type="email" id="view-target-user-email"><button type="button" id="viewPermissionsButton">View Permissions</button><div id="admin-view-permissions-message" style="margin-top: 10px;"></div><div id="user-permissions-display" class="hidden" style="margin-top: 10px;"><h4>Permissions for <span id="display-user-email"></span>:</h4><pre id="display-user-permissions-json"></pre></div></fieldset></div>
+                    <div id="manage-permissions-panel" class="admin-panel"><fieldset><legend>Manage User Permissions</legend><form id="admin-permissions-form"><label for="target-user-email">Target User Email:</label><input type="email" id="target-user-email" required><small style="display: block; margin-top: -0.5rem; margin-bottom: 1rem;">(Creates a new user or updates an existing one.)</small><label for="target-hierarchy-level">New Hierarchy Level:</label><input type="number" id="target-hierarchy-level" placeholder="e.g., 0, 1, 2, 3 (blank for no change)"><label for="target-departments">Departments (comma-separated):</label><input type="text" id="target-departments" list="known-departments-list" placeholder="e.g., HR,IT (blank for no change)"><datalist id="known-departments-list"></datalist><label for="target-projects">Projects (comma-separated):</label><input type="text" id="target-projects" placeholder="e.g., ProjectAlpha (blank for no change)"><label>Contextual Roles:</label><div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.5rem;"><input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)" style="margin-bottom: 0;"><input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)" style="margin-bottom: 0;"><button type="button" id="addRoleButton" style="flex-shrink: 0;">Add Role</button></div><label>Current Roles to Add/Update:</label><pre id="contextual-roles-preview">{}</pre><small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small><button type="submit" style="margin-top: 1rem;">Update User Permissions</button></form><div id="admin-permissions-message" style="margin-top: 10px;"></div></fieldset></div>
+                    <div id="remove-user-panel" class="admin-panel"><fieldset><legend>Remove User</legend><label for="remove-target-user-email">User Email to Remove:</label><input type="email" id="remove-target-user-email"><button type="button" id="removeUserButton" class="btn-danger">Remove User</button><div id="admin-remove-user-message" style="margin-top: 10px;"></div></fieldset></div>
+                </main>
+            </div>
+        </div>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" integrity="sha512-rCQgmUulW6f6QegOvTntKKb5IAoxTpGVCdWqYjkXEpzAns6XUFs8NKVqWe+KQpctp/EoRSFSuykVputqknLYMg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="/static/app.js" defer></script>
 </body>
 </html>

@@ -4,42 +4,41 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Security, BackgroundTasks, Response, Cookie
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from starlette.status import HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
+from fastapi.security import APIKeyHeader
 
 # --- Local Imports ---
-# Services and Utilities
 from .auth_service import fetch_user_access_profile, update_user_permissions_by_admin, remove_user_by_admin
 from .rag_processor import RAGService
 from .ticket_system import suggest_ticket_team, create_ticket
 from .feedback_system import record_feedback
-from .database_utils import init_all_databases, _create_sample_users_if_not_exist
+from .database_utils import init_all_databases, get_recent_tickets
 from .security import create_access_token, get_current_active_user, AuthException
+from .document_updater import synchronize_documents
 
-# Configuration and Models
+# --- Configuration and Models ---
 from .config import (
     AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest,
-    TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS
+    UserPermissionsRequest, UserRemovalRequest, UserProfile,
+    TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS, ALLOWED_ORIGINS,
+    FEEDBACK_HELPFUL, FEEDBACK_NOT_HELPFUL
 )
 
 # --- App Setup ---
-app = FastAPI(title="Company Knowledge Assistant")
+app = FastAPI(title="AI4AI Knowledge Assistant")
 
-# Add this middleware block
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins, fine for local dev. For production, restrict to your frontend's domain.
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers, including our 'Authorization' header.
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
-rag_service: Optional[RAGService] = None
-# ... rest of your file
 rag_service: Optional[RAGService] = None
 
 # --- Path and Logging Configuration ---
@@ -52,25 +51,23 @@ logger = logging.getLogger(__name__)
 
 # --- FastAPI Dependencies for Security ---
 
-def get_current_user_profile(token: str = Header(None, alias="Authorization")) -> Dict[str, Any]:
-    """
-    FastAPI dependency to get the current user's profile from a bearer token.
-    """
-    if token is None or not token.lower().startswith("bearer "):
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Not authenticated: Missing or invalid token format.")
-    
-    token_value = token.split(" ")[1]
+def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> UserProfile:
+    if access_token is None:
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated: Missing access token cookie."
+        )
     try:
-        user_profile = get_current_active_user(token=token_value)
+        user_profile = get_current_active_user(token=access_token)
         return user_profile
     except AuthException as e:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=e.detail, headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail=e.detail,
+            headers={"WWW-Authenticate": "Bearer"}, 
+        )
 
-def get_current_admin_user(current_user: Dict[str, Any] = Depends(get_current_user_profile)) -> Dict[str, Any]:
-    """
-    FastAPI dependency that ensures the current user is an admin.
-    Raises a 403 Forbidden error if the user is not an admin.
-    """
+def get_current_admin_user(current_user: UserProfile  = Depends(get_current_user_profile)) -> Dict[str, Any]:
     user_level = current_user.get("user_hierarchy_level")
     if user_level != ADMIN_HIERARCHY_LEVEL:
         logger.warning(
@@ -82,6 +79,19 @@ def get_current_admin_user(current_user: Dict[str, Any] = Depends(get_current_us
     logger.info(f"Admin access granted for user '{current_user.get('user_email')}'.")
     return current_user
 
+# --- Security for Scheduled Sync Endpoint ---
+api_key_header = APIKeyHeader(name="X-Sync-Token", auto_error=False)
+SYNC_SECRET_TOKEN = os.getenv("SYNC_SECRET_TOKEN")
+
+async def get_api_key(api_key: str = Security(api_key_header)):
+    if not SYNC_SECRET_TOKEN:
+        logger.error("SYNC_SECRET_TOKEN is not set in the environment. Sync endpoint is disabled.")
+        raise HTTPException(status_code=500, detail="Sync service is not configured.")
+    if api_key != SYNC_SECRET_TOKEN:
+        logger.warning("Invalid or missing sync token provided.")
+        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid or missing sync token")
+    return api_key
+
 # --- App Lifecycle Events ---
 
 @app.on_event("startup")
@@ -90,7 +100,6 @@ async def startup_event():
     logger.info("--- Application Startup ---")
     try:
         init_all_databases()
-        _create_sample_users_if_not_exist()
         rag_service = RAGService.from_config()
         logger.info("--- Startup Complete ---")
     except Exception as e:
@@ -111,35 +120,53 @@ async def root():
 # --- Authentication Endpoint ---
 
 @app.post("/auth/login")
-async def login(credentials: AuthCredentials):
-    """
-    Handles user login. If the user exists, returns a JWT token and their profile.
-    """
+async def login(credentials: AuthCredentials, response: Response): # Add response: Response here
     try:
         user_profile = fetch_user_access_profile(credentials.email)
         if not user_profile:
             raise HTTPException(status_code=404, detail="User not found or credentials incorrect.")
 
+        # Token is created
         access_token = create_access_token(data={"sub": user_profile["user_email"]})
         
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user_profile": user_profile
-        }
+        # --- NEW: Set the token in a secure, httpOnly cookie ---
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,          # Prevents JavaScript access (XSS protection)
+            samesite="strict",      # CSRF protection
+            secure=True,            # Only send over HTTPS (essential for production)
+            max_age=60 * 60 * 8,    # 8-hour expiry
+            path="/"
+        )
+        
+        return {"user_profile": user_profile}
+
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
         logger.error(f"Internal server error during login for {credentials.email}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during login.")
 
-# --- Core RAG Endpoint ---
+@app.post("/auth/logout")
+async def logout(response: Response):
+    """
+    Clears the access_token cookie, securely logging the user out.
+    """
+    response.delete_cookie(key="access_token", path="/")
+    return {"message": "Logout successful"}
 
+@app.post("/auth/me")
+async def read_users_me(current_user: UserProfile = Depends(get_current_user_profile)):
+    """
+    Endpoint to get the current user's profile based on their valid cookie.
+    This is used for session validation on the frontend.
+    """
+    return {"user_profile": current_user}
+
+# --- Core RAG Endpoint ---
 @app.post("/rag/chat")
 async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
-    """
-    Handles a chat request. User identity is determined by the auth token.
-    """
     if rag_service is None:
         raise HTTPException(status_code=503, detail="RAG Service is not available.")
     
@@ -147,38 +174,58 @@ async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(g
     logger.info(f"Chat request received from authenticated user: {user_email}")
 
     try:
-        chain = rag_service.get_rag_chain(current_user, request.chat_history)
-
+        # 1. Get the unified, history-aware RAG chain from the service.
+        conversational_rag_chain = rag_service.get_rag_chain(current_user, request.chat_history)
+        
         async def stream_generator():
             try:
+                # 2. Define the input dictionary for the chain.
+                chain_input = {
+                    "question": request.prompt,
+                    "chat_history": request.chat_history
+                }
+                
                 final_sources = []
-                async for chunk in chain.astream({"question": request.prompt}):
-                    if "answer" in chunk:
-                        yield f"data: {json.dumps({'answer_chunk': chunk['answer']})}\n\n"
-                    if "context" in chunk:
-                        final_sources = [doc.metadata.get("source", "Unknown") for doc in chunk["context"]]
+                # 3. Stream the events from the chain.
+                async for event in conversational_rag_chain.astream_events(chain_input, version="v1"):
+                    kind = event["event"]
+                    name = event.get("name")
 
+                    # Stream out the answer chunks as they are generated by the LLM.
+                    if kind == "on_chat_model_stream":
+                        chunk_content = event["data"]["chunk"].content
+                        if chunk_content:
+                            yield f"data: {json.dumps({'answer_chunk': chunk_content})}\n\n"
+
+                    # When the named retrieval/reranking step ends, capture its output (the documents).
+                    if kind == "on_chain_end" and name == "retriever_and_reranker_step":
+                        final_docs = event["data"].get("output", [])
+                        if final_docs:
+                            final_sources = list(set([doc.metadata.get("source", "Unknown") for doc in final_docs]))
+
+                # After the stream is complete, send the consolidated sources.
                 if final_sources:
-                    yield f"data: {json.dumps({'sources': list(set(final_sources))})}\n\n"
+                    yield f"data: {json.dumps({'sources': final_sources})}\n\n"
+
             except Exception as e:
                 logger.error(f"Error during RAG stream for user {user_email}: {e}", exc_info=True)
                 yield f"data: {json.dumps({'error': 'An error occurred during generation.'})}\n\n"
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
     except Exception as e:
-        logger.error(f"Error in RAG service for user {user_email}: {e}", exc_info=True)
+        logger.error(f"Error creating RAG chain for user {user_email}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing chat request.")
+
 
 # --- Ticket System Endpoints ---
 
 @app.post("/tickets/suggest_team")
 async def suggest_team_endpoint(request: SuggestTeamRequest, _: Dict[str, Any] = Depends(get_current_user_profile)):
-    """Suggests a team for a ticket. Requires user to be authenticated."""
     return {"suggested_team": suggest_ticket_team(request.question_text), "available_teams": TICKET_TEAMS}
 
 @app.post("/tickets/create")
 async def create_ticket_endpoint(request: CreateTicketRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
-    """Creates a support ticket. User is identified by token."""
     if request.selected_team not in TICKET_TEAMS:
         raise HTTPException(status_code=400, detail=f"Invalid team selected.")
 
@@ -196,7 +243,8 @@ async def create_ticket_endpoint(request: CreateTicketRequest, current_user: Dic
 
 @app.post("/feedback/record")
 async def record_feedback_endpoint(request: FeedbackRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
-    """Records feedback. User is identified by token."""
+    if request.feedback_type not in [FEEDBACK_HELPFUL, FEEDBACK_NOT_HELPFUL]:
+        raise HTTPException(status_code=400, detail="Invalid feedback type provided.")
     success = record_feedback(
         user_email=current_user["user_email"],
         question=request.question,
@@ -207,23 +255,20 @@ async def record_feedback_endpoint(request: FeedbackRequest, current_user: Dict[
         return {"message": "Feedback recorded successfully"}
     raise HTTPException(status_code=500, detail="Error recording feedback.")
 
+# --- Scheduled Sync Endpoint ---
+@app.post("/admin/sync_documents", dependencies=[Depends(get_api_key)])
+async def trigger_document_sync(background_tasks: BackgroundTasks):
+    logger.info("Document synchronization triggered via secure endpoint.")
+    background_tasks.add_task(synchronize_documents)
+    return {"message": "Document synchronization process started in the background."}
+
 # --- Admin Endpoints (Secured by get_current_admin_user) ---
-
-class UserPermissionsRequest(BaseModel):
-    target_email: str
-    permissions: Dict[str, Any]
-
-class UserRemovalRequest(BaseModel):
-    target_email: str
-
 @app.get("/admin/config_tags")
-async def get_config_tags(_: Dict[str, Any] = Depends(get_current_admin_user)):
-    """Provides config data to the admin UI."""
+async def get_config_tags(_: UserProfile = Depends(get_current_admin_user)):
     return {"known_department_tags": KNOWN_DEPARTMENT_TAGS}
 
 @app.get("/admin/view_user_permissions/{target_email}")
-async def admin_view_user_permissions(target_email: str, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
-    """Admin views a specific user's permissions."""
+async def admin_view_user_permissions(target_email: str, admin_user: UserProfile = Depends(get_current_admin_user)):
     logger.info(f"Admin '{admin_user['user_email']}' viewing permissions for '{target_email}'.")
     user_profile = fetch_user_access_profile(target_email)
     if not user_profile:
@@ -231,8 +276,7 @@ async def admin_view_user_permissions(target_email: str, admin_user: Dict[str, A
     return user_profile
 
 @app.post("/admin/user_permissions")
-async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
-    """Admin creates or updates a user's permissions."""
+async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_user: UserProfile = Depends(get_current_admin_user)):
     logger.info(f"Admin '{admin_user['user_email']}' updating permissions for '{payload.target_email}'.")
     update_result = update_user_permissions_by_admin(
         target_email=payload.target_email,
@@ -243,8 +287,7 @@ async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_u
     return update_result
 
 @app.post("/admin/remove_user")
-async def admin_remove_user(payload: UserRemovalRequest, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
-    """Admin removes a user from the system."""
+async def admin_remove_user(payload: UserRemovalRequest, admin_user: UserProfile = Depends(get_current_admin_user)):
     target_email = payload.target_email
     if target_email == admin_user['user_email']:
         raise HTTPException(status_code=400, detail="Admins cannot remove themselves.")
@@ -255,3 +298,17 @@ async def admin_remove_user(payload: UserRemovalRequest, admin_user: Dict[str, A
         status_code = 404 if "not found" in removal_result["error"] else 500
         raise HTTPException(status_code=status_code, detail=removal_result["error"])
     return removal_result
+
+
+@app.get("/admin/recent_tickets")
+async def view_recent_tickets(admin_user: UserProfile = Depends(get_current_admin_user)):
+    """
+    Admin endpoint to view the most recent support tickets.
+    """
+    logger.info(f"Admin '{admin_user['user_email']}' is viewing recent tickets.")
+    try:
+        recent_tickets = get_recent_tickets(limit=30) # Fetch up to 30 tickets
+        return recent_tickets
+    except Exception as e:
+        logger.error(f"Error fetching recent tickets for admin: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve recent tickets.")

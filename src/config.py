@@ -1,13 +1,24 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Force legacy Keras
-os.environ["KERAS_3"] = "0"
-
-from typing import List, Dict
-
+from typing import List, Dict, Any, TypedDict
 from pathlib import Path
 from dotenv import load_dotenv
 
+from pydantic import BaseModel
+
 load_dotenv()
+
+# --- API & Server Configuration ---
+# Define the list of allowed origins for CORS.
+ALLOWED_ORIGINS = [
+    # Always allow your local development environment
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
+# In production on Render, the RENDER_EXTERNAL_URL environment variable will be set.
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+if RENDER_EXTERNAL_URL:
+    ALLOWED_ORIGINS.append(f"https://{RENDER_EXTERNAL_URL}")
 
 # --- Document Configuration ---
 DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs")
@@ -27,8 +38,9 @@ KNOWN_DEPARTMENT_TAGS = [
     "LEGAL", "MARKETING", "OPERATIONS", "SALES"
 ]
 
-# Mapping for role-specific folder names to role tags. Folder names are matched case-insensitively.
-# Value is the role tag stored in metadata.
+# --- Vector Store Configuration ---
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant")
+
 ROLE_SPECIFIC_FOLDER_TAGS = {
     "lead_docs": "LEAD",
     "admin_files": "ADMIN",
@@ -36,9 +48,9 @@ ROLE_SPECIFIC_FOLDER_TAGS = {
     "team_lead_private": "TEAM_LEAD"
 }
 
-# Mapping for folder names to hierarchy levels. Matched case-insensitively.
 # Numeric levels: Higher number means more privilege / more restricted access.
-# Matched if a folder part contains the KEY (from this dict) and its _LEVEL_ (e.g., "STAFF_0_" or "MANAGER_1_"). Example: "STAFF_0_files", "confidential_MANAGER_1_docs".
+# These values can be used in 'metadata.json' files. The system does not automatically
+# parse them from folder names.
 HIERARCHY_LEVELS_CONFIG = {
     "STAFF": 0,
     "MEMBER": 0, # Alias for staff
@@ -51,23 +63,13 @@ HIERARCHY_LEVELS_CONFIG = {
 }
 ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
 
-# Path structure examples:
-# DOCS_FOLDER/PROJECT_X/file.pdf
-# DOCS_FOLDER/PROJECT_X/lead_docs/plan.pdf
-# DOCS_FOLDER/HR/PROJECT_Y/STAFF_0_GUIDELINES/onboarding.pdf
-# DOCS_FOLDER/IT/PROJECT_Z/manager_exclusive/MANAGER_1_REPORTS/status.pdf
-
-# --- Milvus Configuration ---
-MILVUS_HOST = os.getenv("MILVUS_HOST", "127.0.0.1")
-MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "adv_rbac_kb_v1") # New name for new structure
-VECTOR_DIMENSION = 384
-
 # --- Text Processing ---
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-LLM_MODEL = os.getenv("LLM_MODEL", "gemma3:1b")
+RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
+RERANKER_SCORE_THRESHOLD = 0.2
+LLM_GENERATION_MODEL = "gemini-2.5-flash"
 
 # --- Database Paths ---
 DB_PARENT_DIR_NAME = "database"
@@ -90,7 +92,6 @@ TICKET_TEAM_DESCRIPTIONS = {
 }
 
 # --- API Models ---
-from pydantic import BaseModel
 
 class AuthCredentials(BaseModel):
     email: str
@@ -112,6 +113,36 @@ class FeedbackRequest(BaseModel):
     answer: str
     feedback_type: str # e.g., "👍" or "👎"
 
+class UserPermissionsRequest(BaseModel):
+    target_email: str
+    permissions: Dict[str, Any]
+
+class UserRemovalRequest(BaseModel):
+    target_email: str
+
+class UserProfile(TypedDict):
+    user_email: str
+    user_hierarchy_level: int
+    departments: List[str]
+    projects_membership: List[str]
+    contextual_roles: Dict[str, List[str]]
+
+# --- Constants for Dictionary Keys ---
+USER_EMAIL_KEY = "user_email"
+HIERARCHY_LEVEL_KEY = "user_hierarchy_level"
+DEPARTMENTS_KEY = "departments"
+PROJECTS_KEY = "projects_membership"
+CONTEXTUAL_ROLES_KEY = "contextual_roles"
+
+# --- Constants for Feedback Ratings ---
+FEEDBACK_HELPFUL = "👍"
+FEEDBACK_NOT_HELPFUL = "👎"
+
 
 if __name__ == "__main__":
-    print(f"✅ Config: Docs='{DOCS_FOLDER_NAME}', DBs='{DB_PARENT_DIR_NAME}', LLM='{LLM_MODEL}', MilvusColl='{MILVUS_COLLECTION_NAME}'")
+    print("--- Configuration Loaded ---")
+    print(f"✅ Document Source Folder: '{DOCS_FOLDER_NAME}'")
+    print(f"✅ Local Database Directory: '{DB_PARENT_DIR_NAME}'")
+    print(f"✅ Pinecone Index Name: '{PINECONE_INDEX_NAME}'")
+    print(f"✅ Embedding Model: '{EMBEDDING_MODEL}'")
+    print("--------------------------")

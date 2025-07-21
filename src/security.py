@@ -4,15 +4,16 @@ from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from .config import AUTH_DB_PATH # We might need this later
 from .database_utils import get_user_profile
+from .config import UserProfile
 
 # --- Configuration ---
 
 # This should be a long, random string. You can generate one with:
 # openssl rand -hex 32
-# It's best practice to load this from an environment variable, not hardcode it.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "a_very_insecure_default_secret_key_for_dev_only")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("FATAL: JWT_SECRET_KEY environment variable is not set. Application cannot start.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8 # 8 hours
 
@@ -44,7 +45,7 @@ class AuthException(Exception):
     def __init__(self, detail: str):
         self.detail = detail
 
-def get_current_active_user(token: str) -> Dict[str, Any]:
+def get_current_active_user(token: str) -> UserProfile:
     """
     Decodes the JWT token, validates it, and fetches the user's profile.
     This function will be used as a FastAPI dependency.

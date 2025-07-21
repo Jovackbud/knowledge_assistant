@@ -1,66 +1,80 @@
 import os
-import time
-import json
 import re
+import json
 import logging
 from pathlib import Path
-from pymilvus import Collection, utility, connections, DataType, FieldSchema, CollectionSchema
+import tempfile
+import boto3
+from botocore.exceptions import ClientError
+from pinecone.exceptions import NotFoundException
+
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_pinecone import Pinecone as PineconeVectorStore
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_milvus import Milvus
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Any, Optional
+
+from .utils import sanitize_tag
 
 from .config import (
-    DOCS_FOLDER, ALLOWED_EXTENSIONS, MILVUS_COLLECTION_NAME, VECTOR_DIMENSION,
+    PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, EMBEDDING_MODEL,
     CHUNK_SIZE, CHUNK_OVERLAP, SYNC_STATE_FILE,
-    MILVUS_HOST, MILVUS_PORT, EMBEDDING_MODEL,
     DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_HIERARCHY_LEVEL, DEFAULT_ROLE_TAG,
     KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS, HIERARCHY_LEVELS_CONFIG
 )
-# Import RAGService after config and basic utils to avoid circular dependencies if any
-# from rag_processor import RAGService # No, RAGService needs SentenceTransformerEmbeddings, get it directly
-
-from langchain_community.embeddings import SentenceTransformerEmbeddings
-# from langchain_huggingface import SentenceTransformerEmbeddings
 
 logger = logging.getLogger("DocumentUpdater")
 
+_metadata_cache = {}
 
-def get_milvus_connection_args() -> Dict[str, Any]:
-    return {"host": MILVUS_HOST, "port": MILVUS_PORT}
-
-
-def connect_to_milvus():
-    if not connections.has_connection("default"):
-        logger.info(f"Updater: Connecting to Milvus at {MILVUS_HOST}:{MILVUS_PORT}.")
-        connections.connect(alias="default", **get_milvus_connection_args())
+# Initialize the S3 client. Boto3 will automatically use the credentials and endpoint URL from .env
+s3_client = boto3.client("s3")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
 
-def parse_hierarchy_from_folder_name(folder_name_segment: str) -> Optional[int]:
-    """Parses hierarchy level if folder name segment matches HIERARCHY_LEVELS_CONFIG patterns."""
-    if not folder_name_segment: return None
-    segment_upper = folder_name_segment.upper()
-    for key, level in HIERARCHY_LEVELS_CONFIG.items():
-        # Match if key AND level are in the segment, e.g., "MANAGER_1" in "CONFIDENTIAL_MANAGER_1_DOCS"
-        if key.upper() in segment_upper and f"_{level}_" in segment_upper:
-            return level
-        # Simpler match: if just "MANAGER" is found, return manager's level
-        if key.upper() in segment_upper and f"_{level}_" not in segment_upper and not any(
-                str(l) in segment_upper for l in HIERARCHY_LEVELS_CONFIG.values()):
-            # Avoids matching "STAFF" in "STAFF_0_TEAM_1" and returning 1 if "TEAM_1" is not a hierarchy key
-            # This part is heuristic, might need refinement based on exact folder naming conventions
-            pass  # Let a more specific match (with _level_) take precedence.
+def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
+    """
+    Looks for a 'metadata.json' file in the current directory or any parent directory.
+    This allows for inherited permissions. Caches results to avoid redundant S3 calls.
+    """
+    global _metadata_cache
+    
+    # Check cache first
+    if start_path in _metadata_cache:
+        return _metadata_cache[start_path]
+
+    original_path = start_path
+    current_dir = start_path
+    while current_dir != current_dir.parent:
+        # Check cache for parent directories as well during traversal
+        if current_dir in _metadata_cache:
+            _metadata_cache[original_path] = _metadata_cache[current_dir]
+            return _metadata_cache[current_dir]
+
+        metadata_file_key = str(current_dir / "metadata.json").replace('\\', '/')
+        try:
+            response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=metadata_file_key)
+            metadata_content = response['Body'].read().decode('utf-8')
+            found_metadata = json.loads(metadata_content)
+            _metadata_cache[original_path] = found_metadata # Cache result
+            return found_metadata
+        except (ClientError, json.JSONDecodeError):
+            current_dir = current_dir.parent
+    
+    # If not found all the way to the root, cache the negative result
+    _metadata_cache[original_path] = None
     return None
-
 
 def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
     """
-    Extracts metadata from a relative file path based on configured conventions.
-    Path segments are processed to identify department, project, role, and hierarchy.
+    Extracts metadata by finding and loading a 'metadata.json' manifest file
+    from the document's directory or a parent directory in S3/R2.
     """
     path_obj = Path(relative_path)
-    parts = list(path_obj.parts[:-1])  # Directory parts only
+    # The starting point for the search is the directory containing the file
+    search_dir = path_obj.parent
 
+    # Define the default metadata structure
     metadata = {
         "department_tag": DEFAULT_DEPARTMENT_TAG,
         "project_tag": DEFAULT_PROJECT_TAG,
@@ -68,318 +82,186 @@ def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
         "role_tag_required": DEFAULT_ROLE_TAG,
     }
 
-    # Process parts to find known metadata types
-    # A part could be a department, project, role folder, or hierarchy indicator.
-    # Order of detection can matter.
+    # Find the explicit metadata from a manifest file
+    manifest_data = find_metadata_file(search_dir)
 
-    # Simple approach: iterate and assign first found, then refine
-    # This is heuristic and depends on naming conventions not overlapping too much.
-    # E.g. a project name shouldn't be "lead_docs" if that's a role folder.
+    if manifest_data:
+        # If a manifest is found, update the defaults with its values.
+        # This is safer as it only updates keys that are explicitly provided.
+        # Use the sanitize function on every tag read from the manifest
+        metadata["department_tag"] = sanitize_tag(manifest_data.get("department_tag", metadata["department_tag"]))
+        metadata["project_tag"] = sanitize_tag(manifest_data.get("project_tag", metadata["project_tag"]))
+        metadata["hierarchy_level_required"] = manifest_data.get("hierarchy_level_required", metadata["hierarchy_level_required"])
+        metadata["role_tag_required"] = sanitize_tag(manifest_data.get("role_tag_required", metadata["role_tag_required"]))
+        logger.info(f"Loaded and sanitized metadata for '{relative_path}'. Data: {metadata}")
+    else:
+        logger.warning(f"No 'metadata.json' found in the path for '{relative_path}'. "
+                       f"Falling back to default metadata. This may restrict access unexpectedly.")
 
-    # Pass 1: Identify definite types (department, role, hierarchy)
-    # Convert KNOWN_DEPARTMENT_TAGS and ROLE_SPECIFIC_FOLDER_TAGS keys to lowercase for case-insensitive matching
-    known_dept_tags_lower = [tag.lower() for tag in KNOWN_DEPARTMENT_TAGS]
-    role_folder_tags_lower = {key.lower(): value for key, value in ROLE_SPECIFIC_FOLDER_TAGS.items()}
-
-    project_candidates = []
-
-    for part in parts:
-        part_lower = part.lower()
-        # Check for Department
-        if metadata["department_tag"] == DEFAULT_DEPARTMENT_TAG and part_lower in known_dept_tags_lower:
-            original_dept_tag_index = known_dept_tags_lower.index(part_lower)
-            metadata["department_tag"] = KNOWN_DEPARTMENT_TAGS[original_dept_tag_index].upper()
-            continue  # Part consumed as department
-
-        # Check for Role Folder
-        if metadata["role_tag_required"] == DEFAULT_ROLE_TAG and part_lower in role_folder_tags_lower:
-            metadata["role_tag_required"] = role_folder_tags_lower[part_lower].upper()
-            continue  # Part consumed as role
-
-        # Check for Hierarchy Level
-        parsed_hierarchy = parse_hierarchy_from_folder_name(part)
-        if parsed_hierarchy is not None:
-            # Potentially update if a more restrictive level is found deeper in path, or take first.
-            # For now, take the first one found that is not default.
-            if metadata["hierarchy_level_required"] == DEFAULT_HIERARCHY_LEVEL or parsed_hierarchy > metadata[
-                "hierarchy_level_required"]:
-                metadata["hierarchy_level_required"] = parsed_hierarchy
-            # Don't 'continue' yet, as a folder like "MANAGER_1_PROJECT_ALPHA_DOCS" might also indicate project.
-
-        # If not a clear type, add to project candidates (if not too generic like "docs", "files")
-        if part_lower not in ["docs", "files", "general", "confidential", "private", "shared"] and len(part) > 2:
-            if not (
-                    part_lower in known_dept_tags_lower or part_lower in role_folder_tags_lower or parsed_hierarchy is not None):
-                project_candidates.append(part)
-
-    # Assign Project Tag from candidates if not already set by a more complex logic
-    # Heuristic: if only one candidate, or the most "project-like" one.
-    # For now, if department is set and there's a candidate, it's likely a project.
-    # If department is NOT set, the first significant candidate is likely the project.
-    if project_candidates:
-        if metadata["project_tag"] == DEFAULT_PROJECT_TAG:
-            # Take the first "significant" part that wasn't classified as dept/role/hierarchy
-            # This is highly dependent on folder structure discipline.
-            # If `DOCS_FOLDER/PROJECT_X/file.pdf`, PROJECT_X is candidate.
-            # If `DOCS_FOLDER/HR/PROJECT_Y/file.pdf`, PROJECT_Y is candidate after HR is parsed.
-            metadata["project_tag"] = project_candidates[0].upper()  # Simplistic: take first candidate
-
-    # Ensure department is not also the project if structure is ambiguous
-    if metadata["department_tag"] != DEFAULT_DEPARTMENT_TAG.upper() and metadata["department_tag"] == metadata["project_tag"]:
-        metadata["project_tag"] = DEFAULT_PROJECT_TAG.upper()  # Avoid department being same as project
-
-    # logger.debug(f"Extracted metadata for '{relative_path}': {metadata} from parts: {parts}")
     return metadata
 
 
-def get_document_loader(file_path: str):
-    ext = os.path.splitext(file_path)[1].lower()
+def get_document_loader(file_path: str, ext: str):
+    """Initializes a document loader based on file extension."""
     try:
-        if ext == ".txt":
-            return TextLoader(file_path, encoding="utf-8")
-        elif ext == ".pdf":
-            return PyPDFLoader(file_path)
-        elif ext == ".md":
-            return UnstructuredMarkdownLoader(file_path)
-        else:
-            logger.warning(f"No loader for extension '{ext}' in '{file_path}'. Skipping.")
-            return None
+        if ext == ".txt": return TextLoader(file_path, encoding="utf-8")
+        elif ext == ".pdf": return PyPDFLoader(file_path)
+        elif ext == ".md": return UnstructuredMarkdownLoader(file_path)
+        return None
     except Exception as e:
         logger.error(f"Error initializing loader for {file_path}: {e}", exc_info=True)
         return None
 
-
-def load_and_split_document(full_file_path: str, relative_path: str) -> List[Dict[str, Any]]:
-    loader = get_document_loader(full_file_path)
-    if not loader: return []
-    try:
-        documents = loader.load()
-    except Exception as e:
-        logger.error(f"Error loading document '{full_file_path}': {e}", exc_info=True)
+def load_and_split_s3_document(s3_key: str) -> List[Dict[str, Any]]:
+    """Downloads a file from S3/R2, loads it, and splits it into processable chunks."""
+    ext = os.path.splitext(s3_key)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
         return []
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP,
-        length_function=len, is_separator_regex=False,
-    )
-    split_docs_lc = text_splitter.split_documents(documents)
-    path_metadata = extract_metadata_from_path(relative_path)
+    with tempfile.NamedTemporaryFile(delete=True, suffix=ext) as tmp_file:
+        try:
+            s3_client.download_file(S3_BUCKET_NAME, s3_key, tmp_file.name)
+        except ClientError as e:
+            logger.error(f"Failed to download '{s3_key}' from bucket '{S3_BUCKET_NAME}': {e}")
+            return []
+
+        loader = get_document_loader(tmp_file.name, ext)
+        if not loader: return []
+        
+        try:
+            documents = loader.load()
+        except Exception as e:
+            logger.error(f"Error loading document from temp file for S3 key '{s3_key}': {e}", exc_info=True)
+            return []
+
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    split_docs = text_splitter.split_documents(documents)
+    path_metadata = extract_metadata_from_path(s3_key)
 
     processed_chunks = []
-    for i, doc_chunk_lc in enumerate(split_docs_lc):
-        chunk_metadata = {"source": relative_path, "chunk_index": i, **path_metadata}
-        # Add loader metadata if any, ensuring simple types
-        if hasattr(doc_chunk_lc, 'metadata') and isinstance(doc_chunk_lc.metadata, dict):
-            for key, value in doc_chunk_lc.metadata.items():
-                if isinstance(value, (str, int, float, bool)) and key not in chunk_metadata:
-                    chunk_metadata[key] = value
-
-        page_content = doc_chunk_lc.page_content if isinstance(doc_chunk_lc.page_content, str) else str(
-            doc_chunk_lc.page_content)
-        processed_chunks.append({"page_content": page_content, "metadata": chunk_metadata})
-
-    logger.info(f"Loaded & split '{full_file_path}' ({len(processed_chunks)} chunks). Path metadata: {path_metadata}")
+    for i, doc_chunk in enumerate(split_docs):
+        chunk_metadata = {"source": s3_key, "chunk_index": i, **path_metadata}
+        processed_chunks.append({"page_content": doc_chunk.page_content, "metadata": chunk_metadata})
+    
+    logger.info(f"Processed S3 key '{s3_key}': {len(processed_chunks)} chunks created.")
     return processed_chunks
 
-
-def create_milvus_collection_if_not_exists(collection_name: str, vector_dim: int):
-    connect_to_milvus()
-    if not utility.has_collection(collection_name):
-        logger.info(f"Collection '{collection_name}' not found. Creating with new schema.")
-        fields = [
-            FieldSchema(name="pk", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=vector_dim),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65_535),
-            FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=1024),
-            FieldSchema(name="chunk_index", dtype=DataType.INT32),
-            FieldSchema(name="department_tag", dtype=DataType.VARCHAR, max_length=256),
-            FieldSchema(name="project_tag", dtype=DataType.VARCHAR, max_length=256),
-            FieldSchema(name="hierarchy_level_required", dtype=DataType.INT32),  # INT32 more common than INT8
-            FieldSchema(name="role_tag_required", dtype=DataType.VARCHAR, max_length=256),
-        ]
-        schema = CollectionSchema(fields=fields, description="KB Collection with advanced RBAC metadata")
-        collection = Collection(collection_name, schema=schema, using='default')
-        logger.info(f"Collection '{collection_name}' created.")
-        index_params = {"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
-        collection.create_index(field_name="vector", index_params=index_params)
-        logger.info(f"Vector index created for '{collection_name}'.")
-        # Scalar field indexing can be added here if needed for performance on very large datasets
-        # collection.create_index(field_name="department_tag", index_name="idx_dept")
-        # collection.create_index(field_name="project_tag", index_name="idx_proj")
-        # collection.create_index(field_name="hierarchy_level_required", index_name="idx_hier")
-        # collection.create_index(field_name="role_tag_required", index_name="idx_role")
-    else:
-        logger.info(f"Collection '{collection_name}' already exists.")
-    collection = Collection(collection_name, using='default')
-    logger.info(f"Loading collection '{collection_name}' for document update.")
-    collection.load()
-
-
-def synchronize_documents():
-    logger.info("Starting document synchronization...")
-    try:
-        # 1. Connect & collection setup
-        connect_to_milvus()
-        create_milvus_collection_if_not_exists(MILVUS_COLLECTION_NAME, VECTOR_DIMENSION)
-
-        # 2. Prepare embeddings and Milvus clients
-        embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL)
-        vector_store_lc = Milvus(
-            embedding_function=embeddings,
-            collection_name=MILVUS_COLLECTION_NAME,
-            connection_args=get_milvus_connection_args(),
-            auto_id=True,
-            vector_field="vector"
-        )
-        milvus_collection_direct = Collection(MILVUS_COLLECTION_NAME, using='default')
-        milvus_collection_direct.load()
-        logger.info(f"Ensuring collection '{MILVUS_COLLECTION_NAME}' is loaded before sync.")
-
-        # --- NEW: auto‐reset sync state if Milvus is empty ---
-        try:
-            num_entities = milvus_collection_direct.num_entities
-        except Exception:
-            num_entities = 0
-
-        if num_entities == 0 and SYNC_STATE_FILE.exists():
-            logger.info("Milvus empty but sync state present—resetting sync state to force full re-import.")
-            try:
-                SYNC_STATE_FILE.unlink()
-            except Exception as e:
-                logger.error(f"Failed to delete stale sync state file: {e}", exc_info=True)
-        # -----------------------------------------------------
-
-        # 3. Scan docs folder and load last sync state
-        current_docs_state = scan_docs_folder()
-        last_sync_state = load_sync_state()
-
-        # 4. Handle deletions in Milvus
-        process_deletions(last_sync_state, current_docs_state, milvus_collection_direct)
-
-        # 5. Find and process new or updated files
-        new_or_updated_files = find_new_or_updated_files(last_sync_state, current_docs_state)
-        if new_or_updated_files:
-            process_additions_or_updates(
-                files_to_process_paths=new_or_updated_files,
-                vector_store_lc=vector_store_lc,
-                milvus_collection_direct=milvus_collection_direct
-            )
-        else:
-            logger.info("No new or updated documents to process.")
-
-        # 6. Save the fresh sync state
-        save_sync_state(current_docs_state)
-        logger.info("✅ Document synchronization completed successfully.")
-    except Exception as e:
-        logger.error(f"❌ Document synchronization failed: {e}", exc_info=True)
-
-
-def scan_docs_folder() -> Dict[str, float]:
-    logger.info(f"Scanning documents folder: '{DOCS_FOLDER}'")
+def scan_s3_bucket() -> Dict[str, str]:
+    """Scans the S3/R2 bucket and returns a dictionary of object keys and their ETags."""
+    logger.info(f"Scanning S3-compatible bucket: '{S3_BUCKET_NAME}'")
     current_state = {}
-    for root, _, files in os.walk(DOCS_FOLDER):
-        for f_name in files:
-            if os.path.splitext(f_name)[1].lower() in ALLOWED_EXTENSIONS:
-                full_path = Path(root) / f_name
-                relative_path = full_path.relative_to(DOCS_FOLDER).as_posix()  # Use POSIX for consistency
-                try:
-                    current_state[relative_path] = full_path.stat().st_mtime
-                except FileNotFoundError:
-                    logger.warning(f"File not found during scan (possibly deleted mid-scan): {full_path}")
-                    continue
-    logger.info(f"Found {len(current_state)} documents in '{DOCS_FOLDER}'.")
+    try:
+        paginator = s3_client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=S3_BUCKET_NAME):
+            for obj in page.get('Contents', []):
+                key = obj['Key']
+                if key.endswith('/'): continue
+                if os.path.splitext(key)[1].lower() in ALLOWED_EXTENSIONS:
+                    current_state[key] = obj['ETag'].strip('"')
+    except ClientError as e:
+        logger.error(f"Failed to scan S3 bucket '{S3_BUCKET_NAME}': {e}")
+        return {}
+    logger.info(f"Found {len(current_state)} documents in S3 bucket.")
     return current_state
 
-
-def load_sync_state() -> Dict[str, float]:
-    if not SYNC_STATE_FILE.exists():
-        logger.info(f"Sync state file '{SYNC_STATE_FILE}' not found. Assuming clean sync.")
-        return {}
+def load_sync_state() -> Dict[str, str]:
+    if not SYNC_STATE_FILE.exists(): return {}
     try:
-        with open(SYNC_STATE_FILE, 'r') as f:
-            state = json.load(f)
-        logger.info(f"Loaded sync state from '{SYNC_STATE_FILE}' ({len(state)} entries).")
-        return state
-    except (json.JSONDecodeError, IOError) as e:
-        logger.warning(f"Could not load/parse sync state file '{SYNC_STATE_FILE}': {e}. Assuming clean sync.",
-                       exc_info=True)
-        return {}
+        with open(SYNC_STATE_FILE, 'r') as f: return json.load(f)
+    except (json.JSONDecodeError, IOError): return {}
 
-
-def save_sync_state(state: Dict[str, float]):
+def save_sync_state(state: Dict[str, str]):
     try:
-        with open(SYNC_STATE_FILE, 'w') as f:
-            json.dump(state, f, indent=4)
-        logger.info(f"Saved current sync state to '{SYNC_STATE_FILE}'.")
-    except IOError as e:
-        logger.error(f"Failed to save sync state to '{SYNC_STATE_FILE}': {e}", exc_info=True)
+        with open(SYNC_STATE_FILE, 'w') as f: json.dump(state, f, indent=4)
+        logger.info(f"Saved current S3 sync state to '{SYNC_STATE_FILE}'.")
+    except IOError: logger.error("Failed to save sync state file.")
 
+def clear_metadata_cache():
+    global _metadata_cache
+    _metadata_cache.clear()
 
-def process_deletions(old_state: Dict[str, float], new_state: Dict[str, float], collection: Collection):
-    deleted_files_paths = set(old_state.keys()) - set(new_state.keys())
-    if not deleted_files_paths:
-        logger.info("No documents to delete from Milvus.")
+def synchronize_documents():
+    """
+    Synchronizes documents from the S3/R2 bucket to the Pinecone vector store.
+    This version includes robust error handling for Pinecone operations.
+    """
+    clear_metadata_cache()
+    if not S3_BUCKET_NAME:
+        logger.error("S3_BUCKET_NAME environment variable not set. Aborting document synchronization.")
         return
 
-    logger.info(f"Found {len(deleted_files_paths)} documents to delete: {deleted_files_paths}")
-    delete_expr_list = [f'"{path}"' for path in deleted_files_paths]
-    if not delete_expr_list: return
-    delete_expr = f"source IN [{', '.join(delete_expr_list)}]"
-
+    logger.info("Starting document synchronization from S3/R2 to Pinecone...")
     try:
-        logger.info(f"Attempting Milvus deletion with expression: {delete_expr}")
-        res = collection.delete(delete_expr)
-        logger.info(
-            f"Milvus deletion result: {res.delete_count} entities deleted for {len(deleted_files_paths)} files.")
-        collection.flush()
-        logger.info("Milvus collection flushed after deletions.")
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
+        logger.info(f"Successfully connected to Pinecone index '{PINECONE_INDEX_NAME}'.")
+
+        current_s3_state = scan_s3_bucket()
+        last_sync_state = load_sync_state()
+
+        # Determine changes by comparing the current state of the S3 bucket
+        # with the state from the last successful synchronization.
+        last_keys = set(last_sync_state.keys())
+        current_keys = set(current_s3_state.keys())
+        
+        deleted_keys = last_keys - current_keys
+        new_keys = current_keys - last_keys
+        updated_keys = {
+            key for key in current_keys.intersection(last_keys)
+            if current_s3_state[key] != last_sync_state.get(key)
+        }
+        
+        # --- ROBUST DELETION LOGIC ---
+        if deleted_keys:
+            logger.info(f"Deleting documents for keys: {deleted_keys}")
+            for key in deleted_keys:
+                try:
+                    # Attempt to delete all vectors associated with the deleted file's source key.
+                    vector_store.delete(filter={"source": key})
+                except NotFoundException:
+                    # This error can occur if the index is empty or the vectors were already
+                    # removed. It's safe to log a warning and continue.
+                    logger.warning(
+                        f"Attempted to delete vectors for key '{key}', but they were not found in the index. "
+                        "This is safe to ignore during a first-time sync or if the data is already clean."
+                    )
+            logger.info(f"Finished processing deletions for {len(deleted_keys)} documents from Pinecone.")
+
+        # --- PROCESS ADDITIONS AND UPDATES ---
+        files_to_process = new_keys.union(updated_keys)
+        if not files_to_process:
+            logger.info("No new or updated documents in S3/R2 to process.")
+        else:
+            logger.info(f"Processing {len(files_to_process)} new/updated documents from S3/R2...")
+            for s3_key in files_to_process:
+                # For updated files, first delete existing chunks to avoid orphans.
+                # This also uses a resilient try/except block.
+                if s3_key in updated_keys:
+                    try:
+                        vector_store.delete(filter={"source": s3_key})
+                        logger.info(f"Deleted old chunks for updated S3 key '{s3_key}'.")
+                    except NotFoundException:
+                        logger.warning(
+                            f"Attempted to delete old chunks for updated key '{s3_key}' but none were found. "
+                            "Proceeding with adding new chunks."
+                        )
+
+                chunks = load_and_split_s3_document(s3_key)
+                if not chunks: continue
+
+                texts_to_add = [c['page_content'] for c in chunks]
+                metadatas_to_add = [c['metadata'] for c in chunks]
+                ids_to_add = [f"{s3_key}-{i}" for i in range(len(chunks))]
+
+                # Pinecone's add_texts is an "upsert" operation. It will add new vectors
+                # or update existing ones if the IDs already exist.
+                vector_store.add_texts(texts=texts_to_add, metadatas=metadatas_to_add, ids=ids_to_add)
+                logger.info(f"Upserted {len(texts_to_add)} chunks for S3 key '{s3_key}'.")
+
+        # After all operations are complete, save the current state for the next run.
+        save_sync_state(current_s3_state)
+        logger.info("✅ S3/R2 to Pinecone document synchronization completed successfully.")
+
     except Exception as e:
-        logger.error(f"Error during Milvus deletion for '{delete_expr}': {e}", exc_info=True)
-
-
-def find_new_or_updated_files(old_state: Dict[str, float], new_state: Dict[str, float]) -> List[str]:
-    new_or_updated_paths = [
-        rel_path for rel_path, current_mtime in new_state.items()
-        if rel_path not in old_state or old_state[rel_path] < current_mtime
-    ]
-    logger.info(f"Found {len(new_or_updated_paths)} new or updated documents.")
-    return new_or_updated_paths
-
-
-def process_additions_or_updates(
-        files_to_process_paths: List[str],
-        vector_store_lc: Milvus,
-        milvus_collection_direct: Collection
-):
-    if not files_to_process_paths: return
-
-    all_texts_to_add, all_metadatas_to_add = [], []
-    for rel_path in files_to_process_paths:
-        full_path = DOCS_FOLDER / rel_path
-        logger.info(f"Processing for addition/update: '{full_path}' (rel: '{rel_path}')")
-        try:
-            # Delete old chunks first for updated files
-            delete_expr = f'source == "{rel_path}"'
-            del_res = milvus_collection_direct.delete(delete_expr)
-            if del_res.delete_count > 0:
-                logger.info(f"Deleted {del_res.delete_count} old chunks for updated file '{rel_path}'.")
-                milvus_collection_direct.flush()
-        except Exception as e:
-            logger.error(f"Failed to delete old chunks for '{rel_path}': {e}. Risk of duplicates.", exc_info=True)
-
-        chunks_data = load_and_split_document(str(full_path), rel_path)
-        for chunk_item in chunks_data:
-            all_texts_to_add.append(chunk_item["page_content"])
-            all_metadatas_to_add.append(chunk_item["metadata"])
-
-    if all_texts_to_add:
-        try:
-            logger.info(f"Adding/updating {len(all_texts_to_add)} text chunks to Milvus '{MILVUS_COLLECTION_NAME}'.")
-            vector_store_lc.add_texts(texts=all_texts_to_add, metadatas=all_metadatas_to_add)
-            logger.info(f"Successfully added/updated {len(all_texts_to_add)} chunks.")
-            milvus_collection_direct.flush()
-            logger.info(f"Milvus collection '{MILVUS_COLLECTION_NAME}' flushed after additions/updates.")
-        except Exception as e:
-            logger.error(f"Failed to add texts to Milvus: {e}", exc_info=True)
-    else:
-        logger.info("No new text chunks from processed files to add to Milvus.")
+        logger.error(f"❌ Document synchronization failed: {e}", exc_info=True)
+        raise
