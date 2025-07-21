@@ -156,15 +156,15 @@ class RAGService:
         Builds a metadata filter expression for Pinecone based on user profile.
         """
         user_level = profile.get("user_hierarchy_level", -1)
-        user_depts_sanitized = [self.sanitize_tag(d) for d in profile.get("departments", [])]
-        user_projs_sanitized = [self.sanitize_tag(p) for p in profile.get("projects_membership", [])]
-        sanitized_contextual_roles = {self.sanitize_tag(k): v for k, v in profile.get("contextual_roles", {}).items()}
+        user_depts_sanitized = [sanitize_tag(d) for d in profile.get("departments", [])]
+        user_projs_sanitized = [sanitize_tag(p) for p in profile.get("projects_membership", [])]
+        sanitized_contextual_roles = {sanitize_tag(k): v for k, v in profile.get("contextual_roles", {}).items()}
 
-        default_dept_tag = self.sanitize_tag(DEFAULT_DEPARTMENT_TAG)
+        default_dept_tag = sanitize_tag(DEFAULT_DEPARTMENT_TAG)
         all_dept_roles = {DEFAULT_ROLE_TAG, *sanitized_contextual_roles.get(default_dept_tag, [])}
         for dept in user_depts_sanitized: all_dept_roles.update(sanitized_contextual_roles.get(dept, []))
 
-        default_proj_tag = self.sanitize_tag(DEFAULT_PROJECT_TAG)
+        default_proj_tag = sanitize_tag(DEFAULT_PROJECT_TAG)
         all_proj_roles = {DEFAULT_ROLE_TAG, *sanitized_contextual_roles.get(default_proj_tag, [])}
         for proj in user_projs_sanitized: all_proj_roles.update(sanitized_contextual_roles.get(proj, []))
         
