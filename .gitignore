@@ -1,35 +1,52 @@
-# Python
+# Bytecode and cache
 __pycache__/
-*.pyc
-
-# Node.js
-node_modules/
+*.py[cod]
+*.so
 
 # Virtual environments
-*/venv*/
-venv
-.env
+venv/
+.venv/
+ENV/
+env/
 
-# VS Code
+# Environment variables
+.env
+.env.*
+
+# VS Code settings
 .vscode/
 
-#GCP credentials
-*json
-knowledge-assistant-gcp_credentials.json
-
-# Logs
-*.log
-
+# PyCharm settings
 .idea/
 
+# Logs and debug output
+*.log
+
+# Data and artifacts
+data/
+datasets/
+sample_docs/
 database/
 milvus/
-sample_docs/
+
+# Model checkpoints and temporary files
+checkpoints/
+*.ckpt
+*.pt
+*.bin
+
+# JSON files (if generated, not source-controlled)
+*.json
+
+# Testing artifacts
 test_reranker.py
+
+# Node.js (if using any front-end with Node)
+node_modules/
 
 # OS-generated files
 .DS_Store
 Thumbs.db
-.env
-.env
-.env 
+
+# Notebook outputs (optional if you prefer clean diffs)
+*.ipynb
