@@ -18,6 +18,6 @@ services:
   - name: document-synchronizer
     type: cron
     plan: free
-    schedule: "*/15 * * * *"
+    schedule: "0 0 * * *"
     # The command is wrapped in single quotes to avoid YAML parsing issues
     command: 'curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents'
