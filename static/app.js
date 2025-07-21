@@ -1,13 +1,10 @@
-// static/app.js - FINAL DEPLOYMENT VERSION (Updated)
-// This version uses secure, httpOnly cookies for authentication and validates the session on startup.
-
+// static/app.js - FINAL DEPLOYMENT VERSION (UI/UX Update)
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Element Selectors (unchanged) ---
+    // --- UPDATED Element Selectors ---
     const loginSection = document.getElementById('login-section');
-    const userProfileSection = document.getElementById('user-profile-section');
+    const userProfileControls = document.getElementById('user-profile-controls');
     const chatSection = document.getElementById('chat-section');
-    const feedbackSection = document.getElementById('feedback-section');
-    const ticketCreationTrigger = document.getElementById('ticket-creation-trigger');
+    const postChatActions = document.getElementById('post-chat-actions'); // New unified bar
     const ticketModal = document.getElementById('ticket-modal');
     const emailInput = document.getElementById('email');
     const loginButton = document.getElementById('loginButton');
@@ -58,8 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const ticketsTableContainer = document.getElementById('tickets-table-container');
     const ticketsTableBody = document.getElementById('tickets-table-body');
 
-    // --- State Variables ---
-    let currentUserProfile = null; // Start with null, will be populated by initApp
+    // --- State Variables (unchanged) ---
+    let currentUserProfile = null;
     let currentUserEmail = null;
     let currentQuestion = null;
     let currentAnswer = null;
@@ -67,12 +64,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let contextualRolesObject = {};
     const ADMIN_LEVEL = 3;
 
-    // --- Helper for fetch options. 'credentials: include' is VITAL for sending cookies. ---
+    // --- Helper for fetch options (unchanged) ---
     const getFetchOptions = (method = 'GET', body = null) => {
         const options = {
             method: method,
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include' // This tells the browser to send cookies with the request.
+            credentials: 'include'
         };
         if (body) {
             options.body = JSON.stringify(body);
@@ -80,14 +77,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return options;
     };
 
-    // --- Visibility & UI Functions ---
+    // --- UPDATED Visibility & UI Functions ---
     function showLogin() {
-        [userProfileSection, chatSection, feedbackSection, ticketCreationTrigger, ticketModal, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
+        [userProfileControls, chatSection, postChatActions, ticketModal, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
         loginSection.classList.remove('hidden');
     }
+
     function showChat() {
-        [loginSection].forEach(el => el.classList.add('hidden'));
-        [userProfileSection, chatSection, ticketCreationTrigger].forEach(el => el.classList.remove('hidden'));
+        loginSection.classList.add('hidden');
+        [userProfileControls, chatSection].forEach(el => el.classList.remove('hidden'));
+        postChatActions.classList.add('hidden'); // Keep actions hidden until a chat response is given
     }
     
     async function loadAdminPanelData() {
@@ -112,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         teamSuggestionP.textContent = ''; ticketTeamSelect.innerHTML = '';
     }
     
+    // --- Append Message & Textarea Resize (unchanged) ---
     function appendMessage(role, text) {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('chat-message', `${role}-message`);
@@ -179,16 +179,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Logout failed, but clearing client-side state anyway:", error);
         } finally {
             localStorage.removeItem('knowledgeAssistantProfile');
-            currentUserEmail = null;
-            currentUserProfile = null; // Reset the in-memory profile
-            currentQuestion = null;
-            currentAnswer = null;
-            chatHistory = [];
+            currentUserEmail = null; currentUserProfile = null;
+            currentQuestion = null; currentAnswer = null; chatHistory = [];
             contextualRolesObject = {};
-            chatHistoryDiv.innerHTML = '';
-            profileEmail.textContent = '';
-            adminPermissionsForm.reset();
-            contextualRolesPreview.textContent = '{}';
+            chatHistoryDiv.innerHTML = ''; profileEmail.textContent = '';
+            adminPermissionsForm.reset(); contextualRolesPreview.textContent = '{}';
             showLogin();
         }
     });
@@ -200,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.push({ role: 'user', content: prompt });
         currentQuestion = prompt;
         chatInput.value = ''; chatInput.style.height = 'auto';
-        feedbackSection.classList.add('hidden');
+        postChatActions.classList.add('hidden'); // Hide actions while waiting for new response
         chatInput.disabled = true; sendChatButton.disabled = true; sendChatButton.textContent = '...';
         try {
             const response = await fetch('/rag/chat', getFetchOptions('POST', { prompt: prompt, chat_history: chatHistory.slice(-8) }));
@@ -239,7 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
             contentDiv.innerHTML = marked.parse(currentAnswer);
             if (contentDiv.textContent === '...') { contentDiv.textContent = "I'm sorry, but I couldn't find a relevant answer in the documents available to me."; }
             chatHistory.push({ role: 'assistant', content: currentAnswer });
-            feedbackSection.classList.remove('hidden'); feedbackButtonsDiv.classList.remove('hidden'); feedbackMessage.textContent = '';
+            postChatActions.classList.remove('hidden'); // Show actions now
+            feedbackButtonsDiv.classList.remove('hidden');
+            feedbackMessage.textContent = '';
         } catch (error) {
             console.error('Chat error:', error);
             const { contentDiv } = appendMessage('assistant', `An error occurred: ${error.message}`);
@@ -259,14 +256,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/feedback/record', getFetchOptions('POST', { question: currentQuestion, answer: currentAnswer, feedback_type: feedbackType }));
             if (!response.ok) throw new Error('Could not submit feedback.');
-            feedbackMessage.textContent = 'Feedback received. Thank you!';
+            feedbackMessage.textContent = 'Thank you!';
             feedbackButtonsDiv.classList.add('hidden');
         } catch (error) { feedbackMessage.textContent = `Error: ${error.message}`; feedbackMessage.className = 'error-message'; }
     }
     helpfulButton.addEventListener('click', () => handleFeedback('👍'));
     notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
-    async function fetchAndDisplayTickets() {
+    // --- Admin Panel Logic ---
+    async function fetchAndDisplayTickets() { /* (unchanged) */
         ticketsTableBody.innerHTML = ''; ticketsTableContainer.classList.add('hidden');
         ticketsLoadingMessage.textContent = 'Loading tickets...'; ticketsLoadingMessage.className = '';
         ticketsLoadingMessage.classList.remove('hidden');
@@ -285,12 +283,37 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { ticketsLoadingMessage.textContent = `Error: ${error.message}`; ticketsLoadingMessage.className = 'error-message'; }
     }
 
+    // NEW: Function to clear admin messages
+    function clearAdminMessages() {
+        if(adminViewPermissionsMessage) {
+            adminViewPermissionsMessage.textContent = '';
+            adminViewPermissionsMessage.className = '';
+        }
+        if(adminPermissionsMessage) {
+            adminPermissionsMessage.textContent = '';
+            adminPermissionsMessage.className = 'error-message';
+        }
+        if(adminRemoveUserMessage) {
+            adminRemoveUserMessage.textContent = '';
+            adminRemoveUserMessage.className = 'error-message';
+        }
+        if(userPermissionsDisplayDiv) {
+            userPermissionsDisplayDiv.classList.add('hidden');
+        }
+    }
+
     function openAdminModal() { adminModal.showModal(); loadAdminPanelData(); fetchAndDisplayTickets(); }
-    function closeAdminModal() { adminModal.close(); }
+    function closeAdminModal() { 
+        adminModal.close(); 
+        clearAdminMessages(); // Clear messages on close
+    }
     openAdminPanelButton.addEventListener('click', openAdminModal);
     adminModalCloseBtn.addEventListener('click', closeAdminModal);
+    // This allows the ESC key to also trigger our cleanup function
+    adminModal.addEventListener('close', clearAdminMessages);
 
-    adminNavButtons.forEach(button => {
+
+    adminNavButtons.forEach(button => { /* (unchanged) */
         button.addEventListener('click', () => {
             const targetPanelId = button.dataset.panel;
             adminNavButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active');
@@ -299,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    addRoleButton.addEventListener('click', () => {
+    addRoleButton.addEventListener('click', () => { /* (unchanged) */
         const context = roleContextTagInput.value.trim().toUpperCase(); const role = roleNameTagInput.value.trim().toUpperCase();
         if (!context || !role) { alert('Both Context and Role Name must be filled.'); return; }
         if (!contextualRolesObject[context]) { contextualRolesObject[context] = []; }
@@ -308,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         roleContextTagInput.value = ''; roleNameTagInput.value = ''; roleContextTagInput.focus();
     });
 
-    adminPermissionsForm.addEventListener('submit', async (event) => {
+    adminPermissionsForm.addEventListener('submit', async (event) => { /* (unchanged) */
         event.preventDefault();
         adminPermissionsMessage.textContent = ''; adminPermissionsMessage.className = 'error-message';
         const targetEmail = targetUserEmailInput.value.trim();
@@ -333,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { adminPermissionsMessage.textContent = `Error: ${error.message}`; }
     });
 
-    viewPermissionsButton.addEventListener('click', async () => {
+    viewPermissionsButton.addEventListener('click', async () => { /* (unchanged) */
         adminViewPermissionsMessage.textContent = ''; adminViewPermissionsMessage.className = 'error-message';
         userPermissionsDisplayDiv.classList.add('hidden');
         const targetEmailToView = viewTargetUserEmailInput.value.trim();
@@ -349,7 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { adminViewPermissionsMessage.textContent = `Error: ${error.message}`; }
     });
 
-    removeUserButton.addEventListener('click', async () => {
+    removeUserButton.addEventListener('click', async () => { /* (unchanged) */
         adminRemoveUserMessage.textContent = ''; adminRemoveUserMessage.className = 'error-message';
         const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
         if (!targetEmailToRemove) { adminRemoveUserMessage.textContent = 'User Email to remove is required.'; return; }
@@ -364,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { adminRemoveUserMessage.textContent = `Error: ${error.message}`; }
     });
 
+    // --- Ticket Modal Logic (unchanged) ---
     openTicketModalButton.addEventListener('click', () => {
         ticketModal.classList.remove('hidden');
         ticketQuestionTextarea.value = currentQuestion || '';
@@ -415,29 +439,17 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { ticketSubmissionMessage.textContent = `Error: ${error.message}`; }
     });
     
-    // --- UPDATED: Application Initialization ---
+    // --- Application Initialization (unchanged) ---
     async function initApp() {
-        // This function now checks for a valid session cookie with the backend
-        // instead of just trusting localStorage.
         try {
-            // Send the cookie to the backend to check if the session is still valid.
             const response = await fetch('/auth/me', getFetchOptions('POST'));
-            
-            if (!response.ok) {
-                // If the response is not OK (e.g., 401 Unauthorized), the cookie is invalid or expired.
-                throw new Error("No valid session.");
-            }
-            
+            if (!response.ok) { throw new Error("No valid session."); }
             const data = await response.json();
             currentUserProfile = data.user_profile;
-
             if (currentUserProfile) {
                 console.log("Session validated. Resuming for:", currentUserProfile.user_email);
-                // We can still use localStorage for the *current* session's convenience but
-                // it's populated with fresh data from the server.
                 localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(currentUserProfile));
                 currentUserEmail = currentUserProfile.user_email;
-
                 profileEmail.textContent = currentUserEmail;
                 showChat();
                 if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
@@ -445,19 +457,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     adminControlsArea.classList.add('hidden');
                 }
-            } else {
-                throw new Error("Profile not found in session response.");
-            }
+            } else { throw new Error("Profile not found in session response."); }
         } catch (error) {
             console.log("Initialization check failed:", error.message);
-            // Clear any potentially stale data and show the login page
             localStorage.removeItem('knowledgeAssistantProfile');
-            currentUserEmail = null;
-            currentUserProfile = null;
+            currentUserEmail = null; currentUserProfile = null;
             showLogin();
         }
     }
     
-    // Run the initialization logic when the page loads
     initApp();
 });

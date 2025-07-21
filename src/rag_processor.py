@@ -14,7 +14,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import Pinecone as PineconeVectorStore
 from flashrank import Ranker, RerankRequest
 
+from .utils import sanitize_tag
+
 from .config import (
+    UserProfile,
     PINECONE_INDEX_NAME, EMBEDDING_MODEL, RERANKER_MODEL, LLM_GENERATION_MODEL,
     DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG, RERANKER_SCORE_THRESHOLD  
 )
@@ -81,7 +84,7 @@ class RAGService:
             logger.error(f"RAG: Pinecone vector store init failed for index '{index_name}': {e}", exc_info=True)
             raise
 
-    def get_rag_chain(self, user_profile: Optional[Dict[str, Any]], chat_history: List[Dict[str, str]]):
+    def get_rag_chain(self, user_profile: Optional[UserProfile], chat_history: List[Dict[str, str]]):
         """
         Constructs a complete, history-aware, and permission-filtered RAG chain.
         """
@@ -148,28 +151,20 @@ class RAGService:
         )
         return conversational_rag_chain
     
-    def _sanitize_tag(self, tag: str) -> str:
-        """
-        Normalizes a tag by removing all non-alphanumeric characters
-        and converting it to uppercase.
-        """
-        if not isinstance(tag, str): return ""
-        return re.sub(r'[^a-zA-Z0-9]', '', tag).upper()
-    
     def _build_filter_expression(self, profile: Dict[str, Any]) -> Dict:
         """
         Builds a metadata filter expression for Pinecone based on user profile.
         """
         user_level = profile.get("user_hierarchy_level", -1)
-        user_depts_sanitized = [self._sanitize_tag(d) for d in profile.get("departments", [])]
-        user_projs_sanitized = [self._sanitize_tag(p) for p in profile.get("projects_membership", [])]
-        sanitized_contextual_roles = {self._sanitize_tag(k): v for k, v in profile.get("contextual_roles", {}).items()}
+        user_depts_sanitized = [self.sanitize_tag(d) for d in profile.get("departments", [])]
+        user_projs_sanitized = [self.sanitize_tag(p) for p in profile.get("projects_membership", [])]
+        sanitized_contextual_roles = {self.sanitize_tag(k): v for k, v in profile.get("contextual_roles", {}).items()}
 
-        default_dept_tag = self._sanitize_tag(DEFAULT_DEPARTMENT_TAG)
+        default_dept_tag = self.sanitize_tag(DEFAULT_DEPARTMENT_TAG)
         all_dept_roles = {DEFAULT_ROLE_TAG, *sanitized_contextual_roles.get(default_dept_tag, [])}
         for dept in user_depts_sanitized: all_dept_roles.update(sanitized_contextual_roles.get(dept, []))
 
-        default_proj_tag = self._sanitize_tag(DEFAULT_PROJECT_TAG)
+        default_proj_tag = self.sanitize_tag(DEFAULT_PROJECT_TAG)
         all_proj_roles = {DEFAULT_ROLE_TAG, *sanitized_contextual_roles.get(default_proj_tag, [])}
         for proj in user_projs_sanitized: all_proj_roles.update(sanitized_contextual_roles.get(proj, []))
         

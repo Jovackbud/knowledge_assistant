@@ -1,6 +1,8 @@
 import logging
 from .database_utils import save_feedback
 
+from .config import FEEDBACK_HELPFUL, FEEDBACK_NOT_HELPFUL
+
 logger = logging.getLogger(__name__)
 
 def record_feedback(user_email, question, answer, rating):

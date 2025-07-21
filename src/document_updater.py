@@ -14,6 +14,8 @@ from langchain_community.document_loaders import TextLoader, PyPDFLoader, Unstru
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import Dict, List, Any, Optional
 
+from .utils import sanitize_tag
+
 from .config import (
     PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, EMBEDDING_MODEL,
     CHUNK_SIZE, CHUNK_OVERLAP, SYNC_STATE_FILE,
@@ -28,12 +30,6 @@ _metadata_cache = {}
 # Initialize the S3 client. Boto3 will automatically use the credentials and endpoint URL from .env
 s3_client = boto3.client("s3")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-
-
-def _sanitize_tag(tag: str) -> str:
-    """Normalizes a tag to be alphanumeric and uppercase."""
-    if not isinstance(tag, str): return ""
-    return re.sub(r'[^a-zA-Z0-9]', '', tag).upper()
 
 
 def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
@@ -93,10 +89,10 @@ def extract_metadata_from_path(relative_path: str) -> Dict[str, Any]:
         # If a manifest is found, update the defaults with its values.
         # This is safer as it only updates keys that are explicitly provided.
         # Use the sanitize function on every tag read from the manifest
-        metadata["department_tag"] = _sanitize_tag(manifest_data.get("department_tag", metadata["department_tag"]))
-        metadata["project_tag"] = _sanitize_tag(manifest_data.get("project_tag", metadata["project_tag"]))
+        metadata["department_tag"] = sanitize_tag(manifest_data.get("department_tag", metadata["department_tag"]))
+        metadata["project_tag"] = sanitize_tag(manifest_data.get("project_tag", metadata["project_tag"]))
         metadata["hierarchy_level_required"] = manifest_data.get("hierarchy_level_required", metadata["hierarchy_level_required"])
-        metadata["role_tag_required"] = _sanitize_tag(manifest_data.get("role_tag_required", metadata["role_tag_required"]))
+        metadata["role_tag_required"] = sanitize_tag(manifest_data.get("role_tag_required", metadata["role_tag_required"]))
         logger.info(f"Loaded and sanitized metadata for '{relative_path}'. Data: {metadata}")
     else:
         logger.warning(f"No 'metadata.json' found in the path for '{relative_path}'. "

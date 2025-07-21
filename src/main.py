@@ -4,11 +4,10 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Security, BackgroundTasks, Response, Cookie
+from fastapi import FastAPI, HTTPException, Depends, Security, BackgroundTasks, Response, Cookie
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from starlette.status import HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
 from fastapi.security import APIKeyHeader
 
@@ -24,17 +23,19 @@ from .document_updater import synchronize_documents
 # --- Configuration and Models ---
 from .config import (
     AuthCredentials, RAGRequest, SuggestTeamRequest, CreateTicketRequest, FeedbackRequest,
-    TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS
+    UserPermissionsRequest, UserRemovalRequest, UserProfile,
+    TICKET_TEAMS, ADMIN_HIERARCHY_LEVEL, KNOWN_DEPARTMENT_TAGS, ALLOWED_ORIGINS,
+    FEEDBACK_HELPFUL, FEEDBACK_NOT_HELPFUL
 )
 
 # --- App Setup ---
-app = FastAPI(title="Company Knowledge Assistant")
+app = FastAPI(title="AI4AI Knowledge Assistant")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -50,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 # --- FastAPI Dependencies for Security ---
 
-def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> Dict[str, Any]:
+def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> UserProfile:
     if access_token is None:
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
@@ -66,7 +67,7 @@ def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> Dict
             headers={"WWW-Authenticate": "Bearer"}, 
         )
 
-def get_current_admin_user(current_user: Dict[str, Any] = Depends(get_current_user_profile)) -> Dict[str, Any]:
+def get_current_admin_user(current_user: UserProfile  = Depends(get_current_user_profile)) -> Dict[str, Any]:
     user_level = current_user.get("user_hierarchy_level")
     if user_level != ADMIN_HIERARCHY_LEVEL:
         logger.warning(
@@ -156,7 +157,7 @@ async def logout(response: Response):
     return {"message": "Logout successful"}
 
 @app.post("/auth/me")
-async def read_users_me(current_user: Dict[str, Any] = Depends(get_current_user_profile)):
+async def read_users_me(current_user: UserProfile = Depends(get_current_user_profile)):
     """
     Endpoint to get the current user's profile based on their valid cookie.
     This is used for session validation on the frontend.
@@ -242,6 +243,8 @@ async def create_ticket_endpoint(request: CreateTicketRequest, current_user: Dic
 
 @app.post("/feedback/record")
 async def record_feedback_endpoint(request: FeedbackRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
+    if request.feedback_type not in [FEEDBACK_HELPFUL, FEEDBACK_NOT_HELPFUL]:
+        raise HTTPException(status_code=400, detail="Invalid feedback type provided.")
     success = record_feedback(
         user_email=current_user["user_email"],
         question=request.question,
@@ -260,20 +263,12 @@ async def trigger_document_sync(background_tasks: BackgroundTasks):
     return {"message": "Document synchronization process started in the background."}
 
 # --- Admin Endpoints (Secured by get_current_admin_user) ---
-
-class UserPermissionsRequest(BaseModel):
-    target_email: str
-    permissions: Dict[str, Any]
-
-class UserRemovalRequest(BaseModel):
-    target_email: str
-
 @app.get("/admin/config_tags")
-async def get_config_tags(_: Dict[str, Any] = Depends(get_current_admin_user)):
+async def get_config_tags(_: UserProfile = Depends(get_current_admin_user)):
     return {"known_department_tags": KNOWN_DEPARTMENT_TAGS}
 
 @app.get("/admin/view_user_permissions/{target_email}")
-async def admin_view_user_permissions(target_email: str, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+async def admin_view_user_permissions(target_email: str, admin_user: UserProfile = Depends(get_current_admin_user)):
     logger.info(f"Admin '{admin_user['user_email']}' viewing permissions for '{target_email}'.")
     user_profile = fetch_user_access_profile(target_email)
     if not user_profile:
@@ -281,7 +276,7 @@ async def admin_view_user_permissions(target_email: str, admin_user: Dict[str, A
     return user_profile
 
 @app.post("/admin/user_permissions")
-async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_user: UserProfile = Depends(get_current_admin_user)):
     logger.info(f"Admin '{admin_user['user_email']}' updating permissions for '{payload.target_email}'.")
     update_result = update_user_permissions_by_admin(
         target_email=payload.target_email,
@@ -292,7 +287,7 @@ async def admin_update_user_permissions(payload: UserPermissionsRequest, admin_u
     return update_result
 
 @app.post("/admin/remove_user")
-async def admin_remove_user(payload: UserRemovalRequest, admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+async def admin_remove_user(payload: UserRemovalRequest, admin_user: UserProfile = Depends(get_current_admin_user)):
     target_email = payload.target_email
     if target_email == admin_user['user_email']:
         raise HTTPException(status_code=400, detail="Admins cannot remove themselves.")
@@ -306,7 +301,7 @@ async def admin_remove_user(payload: UserRemovalRequest, admin_user: Dict[str, A
 
 
 @app.get("/admin/recent_tickets")
-async def view_recent_tickets(admin_user: Dict[str, Any] = Depends(get_current_admin_user)):
+async def view_recent_tickets(admin_user: UserProfile = Depends(get_current_admin_user)):
     """
     Admin endpoint to view the most recent support tickets.
     """

@@ -4,8 +4,8 @@ from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from .config import AUTH_DB_PATH # We might need this later
 from .database_utils import get_user_profile
+from .config import UserProfile
 
 # --- Configuration ---
 
@@ -45,7 +45,7 @@ class AuthException(Exception):
     def __init__(self, detail: str):
         self.detail = detail
 
-def get_current_active_user(token: str) -> Dict[str, Any]:
+def get_current_active_user(token: str) -> UserProfile:
     """
     Decodes the JWT token, validates it, and fetches the user's profile.
     This function will be used as a FastAPI dependency.

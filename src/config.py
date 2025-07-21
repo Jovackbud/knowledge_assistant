@@ -1,9 +1,24 @@
 import os
-from typing import List, Dict
+from typing import List, Dict, Any, TypedDict
 from pathlib import Path
 from dotenv import load_dotenv
 
+from pydantic import BaseModel
+
 load_dotenv()
+
+# --- API & Server Configuration ---
+# Define the list of allowed origins for CORS.
+ALLOWED_ORIGINS = [
+    # Always allow your local development environment
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
+# In production on Render, the RENDER_EXTERNAL_URL environment variable will be set.
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+if RENDER_EXTERNAL_URL:
+    ALLOWED_ORIGINS.append(f"https://{RENDER_EXTERNAL_URL}")
 
 # --- Document Configuration ---
 DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs")
@@ -77,7 +92,6 @@ TICKET_TEAM_DESCRIPTIONS = {
 }
 
 # --- API Models ---
-from pydantic import BaseModel
 
 class AuthCredentials(BaseModel):
     email: str
@@ -98,6 +112,31 @@ class FeedbackRequest(BaseModel):
     question: str
     answer: str
     feedback_type: str # e.g., "👍" or "👎"
+
+class UserPermissionsRequest(BaseModel):
+    target_email: str
+    permissions: Dict[str, Any]
+
+class UserRemovalRequest(BaseModel):
+    target_email: str
+
+class UserProfile(TypedDict):
+    user_email: str
+    user_hierarchy_level: int
+    departments: List[str]
+    projects_membership: List[str]
+    contextual_roles: Dict[str, List[str]]
+
+# --- Constants for Dictionary Keys ---
+USER_EMAIL_KEY = "user_email"
+HIERARCHY_LEVEL_KEY = "user_hierarchy_level"
+DEPARTMENTS_KEY = "departments"
+PROJECTS_KEY = "projects_membership"
+CONTEXTUAL_ROLES_KEY = "contextual_roles"
+
+# --- Constants for Feedback Ratings ---
+FEEDBACK_HELPFUL = "👍"
+FEEDBACK_NOT_HELPFUL = "👎"
 
 
 if __name__ == "__main__":

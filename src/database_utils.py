@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Dict, Optional, List, Any
 from .config import (
+    UserProfile,
     TICKET_DB_PATH, FEEDBACK_DB_PATH, AUTH_DB_PATH,
     DB_PARENT_DIR, DEFAULT_HIERARCHY_LEVEL
 )
@@ -159,7 +160,7 @@ def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool
         return False
 
 
-def get_user_profile(email: str) -> Optional[Dict[str, Any]]:
+def get_user_profile(email: str) -> Optional[UserProfile]:
     try:
         with sqlite3.connect(AUTH_DB_PATH, timeout=10, check_same_thread=False) as conn:
             conn.row_factory = sqlite3.Row
