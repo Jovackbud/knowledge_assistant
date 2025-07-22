@@ -279,10 +279,33 @@ def synchronize_documents():
                 logger.info(f"Prepared {len(texts)} chunks from S3 key '{s3_key}'.")
 
             if all_texts_to_add:
-                logger.info(f"Batch upserting a total of {len(all_texts_to_add)} chunks to Pinecone...")
-                # Single, efficient batch upsert operation
-                vector_store.add_texts(texts=all_texts_to_add, metadatas=all_metadatas_to_add, ids=all_ids_to_add)
-                logger.info("Batch upsert completed.")
+                # Define the size of our mini-batches to respect API limits (Google's limit is 100).
+                BATCH_SIZE = 100
+                total_chunks = len(all_texts_to_add)
+                logger.info(f"Preparing to upsert {total_chunks} total chunks in mini-batches of {BATCH_SIZE}...")
+
+                # Loop through the collected chunks in mini-batches
+                for i in range(0, total_chunks, BATCH_SIZE):
+                    # Slice the data for the current mini-batch
+                    batch_texts = all_texts_to_add[i:i + BATCH_SIZE]
+                    batch_metadatas = all_metadatas_to_add[i:i + BATCH_SIZE]
+                    batch_ids = all_ids_to_add[i:i + BATCH_SIZE]
+
+                start_num = i + 1
+                end_num = min(i + BATCH_SIZE, total_chunks)
+
+                logger.info(f"Upserting mini-batch: chunks {start_num}-{end_num} of {total_chunks}...")
+
+                # Perform the upsert for the current mini-batch
+                vector_store.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
+                logger.info(f"Successfully upserted mini-batch {start_num}-{end_num}.")
+
+                # It's polite to add a small delay between batches to avoid hammering the API
+                # especially if there are many batches. This helps with per-minute rate limits.
+                if (i + BATCH_SIZE) < total_chunks:
+                    logger.info("Pausing for 1 second before the next mini-batch...")
+                    time.sleep(5)
+                logger.info("All mini-batches have been processed successfully.")
             else:
                 logger.warning("No processable chunks found in any of the new/updated files.")
 
