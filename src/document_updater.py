@@ -9,7 +9,6 @@ import boto3
 from botocore.exceptions import ClientError
 from pinecone.exceptions import NotFoundException
 
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import Pinecone as PineconeVectorStore
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
