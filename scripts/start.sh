@@ -1,3 +1,9 @@
-# Start FastAPI backend
-echo "Starting FastAPI backend..."
-uvicorn src.main:app --host 0.0.0.0 --port 8000
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+echo "Starting web server..."
+# The 'exec' command is important because it replaces the shell process with the
+# uvicorn process, which is what Render's process manager expects.
+exec uvicorn src.main:app --host 0.0.0.0 --port 8000

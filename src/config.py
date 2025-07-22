@@ -38,8 +38,11 @@ KNOWN_DEPARTMENT_TAGS = [
     "LEGAL", "MARKETING", "OPERATIONS", "SALES"
 ]
 
+# --- Reranker Configuration ---
+USE_RERANKER = os.getenv("USE_RERANKER", "true").lower() in ("true", "1", "t")
+
 # --- Vector Store Configuration ---
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant-v2")
 
 ROLE_SPECIFIC_FOLDER_TAGS = {
     "lead_docs": "LEAD",
@@ -66,7 +69,7 @@ ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
 # --- Text Processing ---
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
 RERANKER_SCORE_THRESHOLD = 0.2
 LLM_GENERATION_MODEL = "gemini-2.5-flash"

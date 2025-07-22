@@ -7,6 +7,8 @@ import os
 # Adjust the Python path to include the root directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from langchain_core.embeddings import Embeddings
+
 from src.database_utils import init_all_databases, _create_sample_users_if_not_exist
 from src.document_updater import synchronize_documents
 import logging
@@ -14,7 +16,11 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("InitializationScript")
 
-if __name__ == '__main__':
+def run_initialization(embeddings_client: Embeddings):
+    """
+    Runs the full suite of initialization tasks: databases, sample users,
+    and the initial document synchronization.
+    """
     logger.info("Starting database and document initialization...")
     try:
         logger.info("Initializing all databases...")
@@ -26,17 +32,13 @@ if __name__ == '__main__':
         logger.info("Sample user creation step complete.")
 
         logger.info("Synchronizing documents...")
-        synchronize_documents()
+        synchronize_documents(embeddings_client)
         logger.info("Document synchronization complete.")
 
         logger.info("All initialization tasks finished successfully.")
 
     except Exception as e:
         logger.critical(f"A critical error occurred during initialization: {e}", exc_info=True)
-        # In a production environment, you might want to exit with a non-zero code
-        # to signal a failed deployment, but for Render's boot process,
-        # letting it continue might be safer so the server can at least start.
-        # If the web server can run without this data, we can let it proceed.
-        # If not, you could re-introduce a sys.exit(1) here.
-        # For now, we log it as critical and allow the server to attempt a start.
-        logger.warning("Initialization failed. The application will continue to start, but may be in a degraded state.")
+        # Re-raise the exception to make it clear the startup failed.
+        # This is better for debugging on Render.
+        raise RuntimeError("Initialization failed, application cannot start.") from e

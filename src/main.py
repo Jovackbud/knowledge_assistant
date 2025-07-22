@@ -19,6 +19,8 @@ from .feedback_system import record_feedback
 from .database_utils import init_all_databases, get_recent_tickets
 from .security import create_access_token, get_current_active_user, AuthException
 from .document_updater import synchronize_documents
+from scripts.initialize import run_initialization
+from .services import shared_services
 
 # --- Configuration and Models ---
 from .config import (
@@ -99,11 +101,21 @@ async def startup_event():
     global rag_service
     logger.info("--- Application Startup ---")
     try:
-        init_all_databases()
+        # Step 1: Initialize shared services first. This creates the single
+        # instance of the Google embedding client. This is now very lightweight.
+        # The 'shared_services' object is imported from src.services
+        
+        # Step 2: Run the initialization process, passing the shared client to it.
+        # This ensures the document synchronizer uses the same client.
+        run_initialization(embeddings_client=shared_services.embedding_model)
+        
+        # Step 3: Now, initialize the RAG service, which also uses the
+        # same shared services internally.
         rag_service = RAGService.from_config()
+        
         logger.info("--- Startup Complete ---")
     except Exception as e:
-        logger.error(f"Application startup failed: {e}", exc_info=True)
+        logger.critical(f"FATAL: Application startup failed: {e}", exc_info=True)
         raise
 
 # --- Static Files and Root Endpoint ---

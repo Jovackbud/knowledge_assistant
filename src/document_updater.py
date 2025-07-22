@@ -12,6 +12,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import Pinecone as PineconeVectorStore
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.embeddings import Embeddings
 from typing import Dict, List, Any, Optional
 
 from .utils import sanitize_tag
@@ -180,7 +181,7 @@ def clear_metadata_cache():
     global _metadata_cache
     _metadata_cache.clear()
 
-def synchronize_documents():
+def synchronize_documents(embeddings_client: Embeddings):
     """
     Synchronizes documents from the S3/R2 bucket to the Pinecone vector store.
     This version includes robust error handling for Pinecone operations.
@@ -192,8 +193,8 @@ def synchronize_documents():
 
     logger.info("Starting document synchronization from S3/R2 to Pinecone...")
     try:
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
+        # The embeddings client is now passed in, not created here.
+        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings_client)
         logger.info(f"Successfully connected to Pinecone index '{PINECONE_INDEX_NAME}'.")
 
         current_s3_state = scan_s3_bucket()

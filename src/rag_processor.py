@@ -19,7 +19,7 @@ from .services import shared_services
 
 from .config import (
     UserProfile,
-    PINECONE_INDEX_NAME, EMBEDDING_MODEL, RERANKER_MODEL, LLM_GENERATION_MODEL,
+    PINECONE_INDEX_NAME, EMBEDDING_MODEL, RERANKER_MODEL, LLM_GENERATION_MODEL, USE_RERANKER,
     DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG, RERANKER_SCORE_THRESHOLD  
 )
 
@@ -31,8 +31,22 @@ class RAGService:
         self.embeddings = shared_services.embedding_model
         self.vector_store = vector_store
         self.llm = llm
-        self.reranker = Ranker(model_name=RERANKER_MODEL, cache_dir="/tmp/flashrank_cache")
-        logger.info(f"RAG: Reranker '{RERANKER_MODEL}' initialized successfully.")
+        # We define a cache path on the persistent disk
+        cache_path = Path("/usr/src/app/database/cache")
+        cache_path.mkdir(exist_ok=True) # Ensure the directory exists
+        self.reranker = None
+        if USE_RERANKER:
+            try:
+                # We define a cache path on the persistent disk
+                cache_path = Path("/usr/src/app/database/cache")
+                cache_path.mkdir(exist_ok=True) # Ensure the directory exists
+                self.reranker = Ranker(model_name=RERANKER_MODEL, cache_dir=str(cache_path))
+                logger.info(f"RAG: Reranker '{RERANKER_MODEL}' initialized successfully.")
+            except Exception as e:
+                logger.error(f"Failed to initialize Reranker, it will be disabled: {e}", exc_info=True)
+                self.reranker = None
+        else:
+            logger.warning("RAG: Reranker is disabled via configuration.")
 
         try:
             prompts_dir = Path(__file__).resolve().parent.parent / "prompts"
@@ -68,7 +82,7 @@ class RAGService:
 
         embeddings = shared_services.embedding_model
         vector_store = cls._init_vector_store(embeddings, PINECONE_INDEX_NAME)
-        return cls(vector_store, llm)
+        return cls(embeddings, vector_store, llm)
 
     @staticmethod
     def _init_vector_store(embeddings: HuggingFaceEmbeddings, index_name: str) -> PineconeVectorStore:
@@ -94,8 +108,14 @@ class RAGService:
         )
 
         def rerank_and_filter_documents(docs: List[Any], question: str) -> List[Any]:
-            if not docs: return []
+            if not docs:
+                return []
             
+            # If reranker is disabled, just return the top 3 documents from the initial retrieval
+            if not self.reranker:
+                logger.info("Reranker is disabled, returning top 3 retrieved documents.")
+                return docs[:3]
+
             if not all(hasattr(doc, 'page_content') and hasattr(doc, 'metadata') for doc in docs):
                 logger.warning("Retrieved documents list contains invalid objects. Skipping reranking.")
                 return []
@@ -104,17 +124,21 @@ class RAGService:
             request = RerankRequest(query=question, passages=passages)
             reranked_results = self.reranker.rerank(request)
             
-            high_confidence_docs = [r for r in reranked_results if r.get("score", 0) >= RERANKER_SCORE_THRESHOLD]
+            # Get the original document objects based on the reranked IDs
+            original_docs_map = {i: doc for i, doc in enumerate(docs)}
             
-            if high_confidence_docs:
-                final_docs_data = high_confidence_docs[:3]
+            high_confidence_results = [r for r in reranked_results if r.get("score", 0) >= RERANKER_SCORE_THRESHOLD]
+            
+            if high_confidence_results:
+                final_results = high_confidence_results[:3]
             elif reranked_results:
                 logger.warning(f"No docs met rerank threshold {RERANKER_SCORE_THRESHOLD}. Using best single doc.")
-                final_docs_data = reranked_results[:1]
+                final_results = reranked_results[:1]
             else:
-                final_docs_data = []
-
-            final_docs = [type(docs[0])(page_content=d["text"], metadata=d["meta"]) for d in final_docs_data]
+                final_results = []
+            
+            # Map back to the original LangChain Document objects
+            final_docs = [original_docs_map[d["id"]] for d in final_results]
             logger.info(f"Reranking complete. Initial: {len(docs)}, Final: {len(final_docs)}")
             return final_docs
 
