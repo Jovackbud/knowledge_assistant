@@ -26,7 +26,7 @@ def run_initialization():
         logger.info("Database initialization complete.")
 
         logger.info("Creating sample users if they don't exist...")
-        _create_sample_users_if_not_exist()
+        create_sample_users_if_not_exist()
         logger.info("Sample user creation step complete.")
 
         logger.info("Synchronizing documents...")
