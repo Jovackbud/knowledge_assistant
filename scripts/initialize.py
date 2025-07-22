@@ -7,8 +7,6 @@ import os
 # Adjust the Python path to include the root directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from langchain_core.embeddings import Embeddings
-
 from src.database_utils import init_all_databases, _create_sample_users_if_not_exist
 from src.document_updater import synchronize_documents
 import logging
@@ -16,7 +14,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("InitializationScript")
 
-def run_initialization(embeddings_client: Embeddings):
+def run_initialization():
     """
     Runs the full suite of initialization tasks: databases, sample users,
     and the initial document synchronization.
@@ -32,7 +30,7 @@ def run_initialization(embeddings_client: Embeddings):
         logger.info("Sample user creation step complete.")
 
         logger.info("Synchronizing documents...")
-        synchronize_documents(embeddings_client)
+        synchronize_documents()
         logger.info("Document synchronization complete.")
 
         logger.info("All initialization tasks finished successfully.")

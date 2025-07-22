@@ -21,7 +21,7 @@ class TeamSuggester:
         logger.info("Initializing AI Team Suggester...")
         try:
             # We initialize the model here. This happens only ONCE when the app starts.
-            self.embedding_model = shared_services.embedding_model
+            self.embedding_model = shared_services.query_embedder
             
             # Prepare the team descriptions and their corresponding embeddings
             self.team_names = list(TICKET_TEAM_DESCRIPTIONS.keys())

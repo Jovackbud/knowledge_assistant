@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import json
 import logging
 from pathlib import Path
@@ -12,10 +13,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import Pinecone as PineconeVectorStore
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.embeddings import Embeddings
 from typing import Dict, List, Any, Optional
 
 from .utils import sanitize_tag
+from .services import shared_services
 
 from .config import (
     PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, EMBEDDING_MODEL,
@@ -181,7 +182,7 @@ def clear_metadata_cache():
     global _metadata_cache
     _metadata_cache.clear()
 
-def synchronize_documents(embeddings_client: Embeddings):
+def synchronize_documents():
     """
     Synchronizes documents from the S3/R2 bucket to the Pinecone vector store.
     This version includes robust error handling for Pinecone operations.
@@ -194,7 +195,7 @@ def synchronize_documents(embeddings_client: Embeddings):
     logger.info("Starting document synchronization from S3/R2 to Pinecone...")
     try:
         # The embeddings client is now passed in, not created here.
-        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings_client)
+        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=shared_services.document_embedder)
         logger.info(f"Successfully connected to Pinecone index '{PINECONE_INDEX_NAME}'.")
 
         current_s3_state = scan_s3_bucket()
@@ -258,6 +259,10 @@ def synchronize_documents(embeddings_client: Embeddings):
                 # or update existing ones if the IDs already exist.
                 vector_store.add_texts(texts=texts_to_add, metadatas=metadatas_to_add, ids=ids_to_add)
                 logger.info(f"Upserted {len(texts_to_add)} chunks for S3 key '{s3_key}'.")
+
+                # Pause for a moment to respect API rate limits.
+                logger.info("Pausing for 8 seconds to respect API rate limits...")
+                time.sleep(8)
 
         # After all operations are complete, save the current state for the next run.
         save_sync_state(current_s3_state)

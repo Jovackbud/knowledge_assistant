@@ -107,7 +107,7 @@ async def startup_event():
         
         # Step 2: Run the initialization process, passing the shared client to it.
         # This ensures the document synchronizer uses the same client.
-        run_initialization(embeddings_client=shared_services.embedding_model)
+        run_initialization()
         
         # Step 3: Now, initialize the RAG service, which also uses the
         # same shared services internally.
