@@ -26,7 +26,6 @@ else:
 DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs")
 DOCS_FOLDER = Path(DOCS_FOLDER_NAME)
 ALLOWED_EXTENSIONS = [".txt", ".pdf", ".md"]
-DOCS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # --- Document Metadata Defaults and Conventions ---
 DEFAULT_DEPARTMENT_TAG = "GENERAL"
