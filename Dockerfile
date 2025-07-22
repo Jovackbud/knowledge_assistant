@@ -33,5 +33,10 @@ RUN chown -R appuser:appgroup /usr/src/app/database /usr/src/app/cache
 # 8. Switch to the non-root user for security
 USER appuser
 
-# 9. Define the command to run your app
+# 9. Switch BACK to the root user before the CMD instruction.
+# This ensures the render-start.sh script itself runs as root,
+# giving it the necessary permissions to chown the mounted disk.
+USER root
+
+# 10. Define the command to run your app
 CMD ["bash", "./render-start.sh"]
