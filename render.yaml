@@ -4,7 +4,7 @@ services:
   - name: initialization-job
     type: job
     plan: free
-    startCommand: python scripts.initialize.py
+    startCommand: python -m scripts.initialize
     envVars:
       - fromGroup: knowledge-assistant-app
     disks:
