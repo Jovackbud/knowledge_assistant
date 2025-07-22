@@ -7,7 +7,7 @@ echo "Running initialization script..."
 # Run the database and document initialization.
 # This will create users and sync documents on the very first boot.
 # On subsequent boots, it will run quickly as everything already exists.
-python scripts/initialize.py
+# python scripts/initialize.py
 
 echo "Initialization complete. Starting web server..."
 # Start the Uvicorn server.

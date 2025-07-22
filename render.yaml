@@ -1,4 +1,11 @@
 services:
+  # NEW: One-off job for initial database setup and document sync.
+  # This runs ONCE on every deploy before the web service starts.
+  - name: initialization-job
+    type: job
+    plan: free
+    startCommand: python scripts/initialize.py
+
   # Main web service for the application
   - name: knowledge-assistant-app
     type: web
@@ -12,7 +19,7 @@ services:
     disks:
       - name: app-data
         mountPath: /usr/src/app/database
-        sizeGB: 0.2
+        sizeGB: 1
 
   # Cron job service to synchronize documents
   - name: document-synchronizer
