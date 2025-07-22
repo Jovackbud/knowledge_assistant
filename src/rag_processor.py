@@ -15,6 +15,7 @@ from langchain_pinecone import Pinecone as PineconeVectorStore
 from flashrank import Ranker, RerankRequest
 
 from .utils import sanitize_tag
+from .services import shared_services
 
 from .config import (
     UserProfile,
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class RAGService:
     def __init__(self, embeddings: HuggingFaceEmbeddings, vector_store: PineconeVectorStore, llm: ChatGoogleGenerativeAI):
-        self.embeddings = embeddings
+        self.embeddings = shared_services.embedding_model
         self.vector_store = vector_store
         self.llm = llm
         self.reranker = Ranker(model_name=RERANKER_MODEL, cache_dir="/tmp/flashrank_cache")
@@ -65,9 +66,9 @@ class RAGService:
             logger.error("RAG: Failed to initialize Google Generative AI LLM.", exc_info=True)
             raise RuntimeError(f"Google Generative AI LLM init failed: {e}")
 
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        embeddings = shared_services.embedding_model
         vector_store = cls._init_vector_store(embeddings, PINECONE_INDEX_NAME)
-        return cls(embeddings, vector_store, llm)
+        return cls(vector_store, llm)
 
     @staticmethod
     def _init_vector_store(embeddings: HuggingFaceEmbeddings, index_name: str) -> PineconeVectorStore:

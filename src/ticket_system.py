@@ -3,6 +3,7 @@ from typing import Optional, Dict
 
 # Use the new descriptions from config
 from .config import TICKET_TEAMS, TICKET_TEAM_DESCRIPTIONS
+from .services import shared_services
 
 # Import the necessary AI and math libraries
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -20,7 +21,7 @@ class TeamSuggester:
         logger.info("Initializing AI Team Suggester...")
         try:
             # We initialize the model here. This happens only ONCE when the app starts.
-            self.embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            self.embedding_model = shared_services.embedding_model
             
             # Prepare the team descriptions and their corresponding embeddings
             self.team_names = list(TICKET_TEAM_DESCRIPTIONS.keys())
