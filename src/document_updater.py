@@ -304,7 +304,7 @@ def synchronize_documents():
                 # especially if there are many batches. This helps with per-minute rate limits.
                 if (i + BATCH_SIZE) < total_chunks:
                     logger.info("Pausing for 1 second before the next mini-batch...")
-                    time.sleep(5)
+                    time.sleep(8)
                 logger.info("All mini-batches have been processed successfully.")
             else:
                 logger.warning("No processable chunks found in any of the new/updated files.")
