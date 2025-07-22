@@ -101,25 +101,8 @@ class RAGService:
         except Exception as e:
             logger.error(f"RAG: Pinecone vector store init failed for index '{index_name}': {e}", exc_info=True)
             raise
-
-    def get_rag_chain(self, user_profile: Optional[UserProfile], chat_history: List[Dict[str, str]]):
-        """
-        Constructs a complete, history-aware, and permission-filtered RAG chain.
-        This version cleanly separates the question rephrasing logic.
-        """
-        # 1. A chain specifically for rephrasing the question
-        rephrase_chain = (
-            self.rephrase_prompt
-            | self.llm
-            | StrOutputParser()
-        ).with_config(run_name="rephrase_question_step")
-
-        # 2. The main RAG chain that answers the question
-        base_retriever = self.vector_store.as_retriever(
-            search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 10}
-        )
-
-        def rerank_and_filter_documents(docs: List[Any], question: str) -> List[Any]:
+    
+    def rerank_and_filter_documents(self, docs: List[Any], question: str) -> List[Any]:
             # This function remains unchanged, no need to copy it again
             if not docs:
                 return []
@@ -145,25 +128,43 @@ class RAGService:
             logger.info(f"Reranking complete. Initial: {len(docs)}, Final: {len(final_docs)}")
             return final_docs
 
-        def format_docs(docs: List[Any]) -> str:
-            # This function also remains unchanged
-            if not docs:
-                return "No relevant documents were found based on your query and access rights after filtering for relevance."
-            return "\n\n---\n\n".join(doc.page_content for doc in docs if hasattr(doc, 'page_content'))
+    def format_docs(self, docs: List[Any]) -> str:
+        # This function also remains unchanged
+        if not docs:
+            return "No relevant documents were found based on your query and access rights after filtering for relevance."
+        return "\n\n---\n\n".join(doc.page_content for doc in docs if hasattr(doc, 'page_content'))
+    
+
+    def get_rag_chain(self, user_profile: Optional[UserProfile], chat_history: List[Dict[str, str]]):
+        """
+        Constructs a complete, history-aware, and permission-filtered RAG chain.
+        This version cleanly separates the question rephrasing logic.
+        """
+        # 1. A chain specifically for rephrasing the question
+        rephrase_chain = (
+            self.rephrase_prompt
+            | self.llm
+            | StrOutputParser()
+        ).with_config(run_name="rephrase_question_step")
+
+        # 2. The main RAG chain that answers the question
+        base_retriever = self.vector_store.as_retriever(
+            search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 10}
+        )
 
         # This is the main processing chain
         answer_chain = (
             RunnablePassthrough.assign(
                 docs=RunnableLambda(
-                    lambda x: rerank_and_filter_documents(
+                    lambda x: self.rerank_and_filter_documents(
                         docs=base_retriever.invoke(x["question"]), # Use the rephrased question
                         question=x["question"]
                     )
                 ).with_config(run_name="retriever_and_reranker_step")
             )
-            .assign(context=lambda x: format_docs(x["docs"]))
+            .assign(context=lambda x: self.format_docs(x["docs"]))
             | self.prompt_template
-            | self.llm
+            | self.llm.with_config(run_name="final_answer_llm")
         )
 
         # 3. The final conversational chain that decides whether to rephrase or not
@@ -180,39 +181,6 @@ class RAGService:
         
         return conversational_rag_chain
 
-        def format_docs(docs: List[Any]) -> str:
-            if not docs:
-                return "No relevant documents were found based on your query and access rights after filtering for relevance."
-            return "\n\n---\n\n".join(doc.page_content for doc in docs if hasattr(doc, 'page_content'))
-
-        rephrase_chain = self.rephrase_prompt | self.llm | StrOutputParser()
-
-        def get_rephrased_question(input_dict: Dict[str, Any]):
-            if input_dict.get("chat_history"):
-                return rephrase_chain.invoke(input_dict)
-            return input_dict["question"]
-
-        conversational_rag_chain = (
-            RunnablePassthrough.assign(rephrased_question=RunnableLambda(get_rephrased_question))
-            | RunnablePassthrough.assign(
-                docs=RunnableLambda(
-                    lambda x: rerank_and_filter_documents(
-                        docs=base_retriever.invoke(x["rephrased_question"]),
-                        question=x["rephrased_question"]
-                    )
-                ).with_config(run_name="retriever_and_reranker_step")
-            )
-            | RunnablePassthrough.assign(context=lambda x: format_docs(x["docs"]))
-            | {
-                "context": itemgetter("context"),
-                "question": itemgetter("question"),
-                "chat_history": itemgetter("chat_history"),
-                "docs": itemgetter("docs")
-            }
-            | self.prompt_template
-            | self.llm
-        )
-        return conversational_rag_chain
     
     def _build_filter_expression(self, profile: Dict[str, Any]) -> Dict:
         """

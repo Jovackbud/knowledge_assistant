@@ -1,10 +1,10 @@
-// static/app.js - FINAL DEPLOYMENT VERSION (UI/UX Update)
+// static/app.js - UPDATED
 document.addEventListener('DOMContentLoaded', () => {
-    // --- UPDATED Element Selectors ---
+    // --- Element Selectors ---
     const loginSection = document.getElementById('login-section');
     const userProfileControls = document.getElementById('user-profile-controls');
     const chatSection = document.getElementById('chat-section');
-    const postChatActions = document.getElementById('post-chat-actions'); // New unified bar
+    const postChatActions = document.getElementById('post-chat-actions');
     const ticketModal = document.getElementById('ticket-modal');
     const emailInput = document.getElementById('email');
     const loginButton = document.getElementById('loginButton');
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ticketsTableContainer = document.getElementById('tickets-table-container');
     const ticketsTableBody = document.getElementById('tickets-table-body');
 
-    // --- State Variables (unchanged) ---
+    // --- State Variables ---
     let currentUserProfile = null;
     let currentUserEmail = null;
     let currentQuestion = null;
@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let contextualRolesObject = {};
     const ADMIN_LEVEL = 3;
 
-    // --- Helper for fetch options (unchanged) ---
+    // --- Helper for fetch options ---
     const getFetchOptions = (method = 'GET', body = null) => {
         const options = {
             method: method,
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return options;
     };
 
-    // --- UPDATED Visibility & UI Functions ---
+    // --- Visibility & UI Functions ---
     function showLogin() {
         [userProfileControls, chatSection, postChatActions, ticketModal, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
         loginSection.classList.remove('hidden');
@@ -88,7 +88,23 @@ document.addEventListener('DOMContentLoaded', () => {
         [userProfileControls, chatSection].forEach(el => el.classList.remove('hidden'));
         postChatActions.classList.add('hidden'); // Keep actions hidden until a chat response is given
     }
-    
+
+    // NEW REFACTORED FUNCTION
+    function updateUIForUserProfile(profile) {
+        currentUserProfile = profile;
+        currentUserEmail = profile.user_email;
+        localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(profile));
+
+        profileEmail.textContent = currentUserEmail;
+        showChat();
+        
+        if (profile.user_hierarchy_level === ADMIN_LEVEL) {
+            adminControlsArea.classList.remove('hidden');
+        } else {
+            adminControlsArea.classList.add('hidden');
+        }
+    }
+
     async function loadAdminPanelData() {
         try {
             const response = await fetch('/admin/config_tags', getFetchOptions());
@@ -106,12 +122,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function hideTicketModal() {
-        ticketModal.classList.add('hidden');
+        ticketModal.close();
         ticketQuestionTextarea.value = ''; ticketSubmissionMessage.textContent = '';
         teamSuggestionP.textContent = ''; ticketTeamSelect.innerHTML = '';
     }
     
-    // --- Append Message & Textarea Resize (unchanged) ---
+    // --- Append Message & Textarea Resize ---
     function appendMessage(role, text) {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('chat-message', `${role}-message`);
@@ -148,20 +164,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Login failed');
             
-            currentUserProfile = data.user_profile;
-            currentUserEmail = data.user_profile.user_email;
-            localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(currentUserProfile));
-
-            if (currentUserProfile) {
-                profileEmail.textContent = currentUserEmail;
-                showChat();
+            // UPDATED to use refactored function
+            if (data.user_profile) {
+                updateUIForUserProfile(data.user_profile);
                 emailInput.value = '';
-                if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
-                    adminControlsArea.classList.remove('hidden');
-                } else {
-                    adminControlsArea.classList.add('hidden');
-                }
-            } else { throw new Error('Login response was missing user profile details.'); }
+            } else {
+                throw new Error('Login response was missing user profile details.');
+            }
         } catch (error) {
             console.error('Login error:', error);
             loginError.textContent = error.message;
@@ -264,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
     // --- Admin Panel Logic ---
-    async function fetchAndDisplayTickets() { /* (unchanged) */
+    async function fetchAndDisplayTickets() {
         ticketsTableBody.innerHTML = ''; ticketsTableContainer.classList.add('hidden');
         ticketsLoadingMessage.textContent = 'Loading tickets...'; ticketsLoadingMessage.className = '';
         ticketsLoadingMessage.classList.remove('hidden');
@@ -283,7 +292,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { ticketsLoadingMessage.textContent = `Error: ${error.message}`; ticketsLoadingMessage.className = 'error-message'; }
     }
 
-    // NEW: Function to clear admin messages
     function clearAdminMessages() {
         if(adminViewPermissionsMessage) {
             adminViewPermissionsMessage.textContent = '';
@@ -309,11 +317,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     openAdminPanelButton.addEventListener('click', openAdminModal);
     adminModalCloseBtn.addEventListener('click', closeAdminModal);
-    // This allows the ESC key to also trigger our cleanup function
     adminModal.addEventListener('close', clearAdminMessages);
 
 
-    adminNavButtons.forEach(button => { /* (unchanged) */
+    adminNavButtons.forEach(button => {
         button.addEventListener('click', () => {
             const targetPanelId = button.dataset.panel;
             adminNavButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active');
@@ -322,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    addRoleButton.addEventListener('click', () => { /* (unchanged) */
+    addRoleButton.addEventListener('click', () => {
         const context = roleContextTagInput.value.trim().toUpperCase(); const role = roleNameTagInput.value.trim().toUpperCase();
         if (!context || !role) { alert('Both Context and Role Name must be filled.'); return; }
         if (!contextualRolesObject[context]) { contextualRolesObject[context] = []; }
@@ -331,7 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
         roleContextTagInput.value = ''; roleNameTagInput.value = ''; roleContextTagInput.focus();
     });
 
-    adminPermissionsForm.addEventListener('submit', async (event) => { /* (unchanged) */
+    adminPermissionsForm.addEventListener('submit', async (event) => {
+        // UPDATED to clear stale messages
+        clearAdminMessages();
         event.preventDefault();
         adminPermissionsMessage.textContent = ''; adminPermissionsMessage.className = 'error-message';
         const targetEmail = targetUserEmailInput.value.trim();
@@ -356,7 +365,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { adminPermissionsMessage.textContent = `Error: ${error.message}`; }
     });
 
-    viewPermissionsButton.addEventListener('click', async () => { /* (unchanged) */
+    viewPermissionsButton.addEventListener('click', async () => {
+        // UPDATED to clear stale messages
+        clearAdminMessages();
         adminViewPermissionsMessage.textContent = ''; adminViewPermissionsMessage.className = 'error-message';
         userPermissionsDisplayDiv.classList.add('hidden');
         const targetEmailToView = viewTargetUserEmailInput.value.trim();
@@ -372,7 +383,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { adminViewPermissionsMessage.textContent = `Error: ${error.message}`; }
     });
 
-    removeUserButton.addEventListener('click', async () => { /* (unchanged) */
+    removeUserButton.addEventListener('click', async () => {
+        // UPDATED to clear stale messages
+        clearAdminMessages();
         adminRemoveUserMessage.textContent = ''; adminRemoveUserMessage.className = 'error-message';
         const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
         if (!targetEmailToRemove) { adminRemoveUserMessage.textContent = 'User Email to remove is required.'; return; }
@@ -387,9 +400,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { adminRemoveUserMessage.textContent = `Error: ${error.message}`; }
     });
 
-    // --- Ticket Modal Logic (unchanged) ---
+    // --- Ticket Modal Logic ---
     openTicketModalButton.addEventListener('click', () => {
-        ticketModal.classList.remove('hidden');
+        ticketModal.showModal();
         ticketQuestionTextarea.value = currentQuestion || '';
         ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
         if (ticketQuestionTextarea.value) { ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -439,25 +452,20 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { ticketSubmissionMessage.textContent = `Error: ${error.message}`; }
     });
     
-    // --- Application Initialization (unchanged) ---
+    // --- Application Initialization ---
     async function initApp() {
         try {
             const response = await fetch('/auth/me', getFetchOptions('POST'));
             if (!response.ok) { throw new Error("No valid session."); }
             const data = await response.json();
-            currentUserProfile = data.user_profile;
-            if (currentUserProfile) {
-                console.log("Session validated. Resuming for:", currentUserProfile.user_email);
-                localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(currentUserProfile));
-                currentUserEmail = currentUserProfile.user_email;
-                profileEmail.textContent = currentUserEmail;
-                showChat();
-                if (currentUserProfile.user_hierarchy_level === ADMIN_LEVEL) {
-                    adminControlsArea.classList.remove('hidden');
-                } else {
-                    adminControlsArea.classList.add('hidden');
-                }
-            } else { throw new Error("Profile not found in session response."); }
+            
+            // UPDATED to use refactored function
+            if (data.user_profile) {
+                console.log("Session validated. Resuming for:", data.user_profile.user_email);
+                updateUIForUserProfile(data.user_profile);
+_            } else {
+                throw new Error("Profile not found in session response.");
+            }
         } catch (error) {
             console.log("Initialization check failed:", error.message);
             localStorage.removeItem('knowledgeAssistantProfile');

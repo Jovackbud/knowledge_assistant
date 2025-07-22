@@ -34,6 +34,7 @@ def init_auth_db():
     """
     with sqlite3.connect(AUTH_DB_PATH, timeout=10, check_same_thread=False) as conn:
         cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS UserAccessProfile (
                 user_email TEXT PRIMARY KEY,
@@ -51,6 +52,7 @@ def init_ticket_db():
     with sqlite3.connect(TICKET_DB_PATH, timeout=10, check_same_thread=False) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tickets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +74,7 @@ def init_feedback_db():
     with sqlite3.connect(FEEDBACK_DB_PATH, timeout=10, check_same_thread=False) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,7 +207,7 @@ def get_user_profile(email: str) -> Optional[UserProfile]:
         return None
 
 
-def _create_sample_users_if_not_exist():
+def create_sample_users_if_not_exist():
     """
     Creates a set of sample users with clear, hardcoded data if they do not exist.
     This hardcoded approach is more readable and less error-prone than dynamic generation.

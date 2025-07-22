@@ -4,7 +4,12 @@ services:
   - name: initialization-job
     type: job
     plan: free
-    startCommand: python scripts/initialize.py
+    startCommand: python scripts.initialize.py
+    envVars:
+      - fromGroup: knowledge-assistant-app
+    disks:
+      - name: app-data
+        mountPath: /usr/src/app/database
 
   # Main web service for the application
   - name: knowledge-assistant-app
@@ -15,7 +20,7 @@ services:
     branch: main
     healthCheck:
       path: /
-      initialDelaySeconds: 180
+      initialDelaySeconds: 90
     disks:
       - name: app-data
         mountPath: /usr/src/app/database
@@ -28,3 +33,9 @@ services:
     schedule: "0 0 * * *"
     # The command is wrapped in single quotes to avoid YAML parsing issues
     command: 'curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents'
+    envVars:
+      - key: SYNC_SECRET_TOKEN
+        fromService:
+          type: web
+          name: knowledge-assistant-app
+          envVarKey: SYNC_SECRET_TOKEN

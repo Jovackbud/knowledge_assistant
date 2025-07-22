@@ -59,7 +59,7 @@
             gap: 1rem;
             font-size: 0.9em;
         }
-        .header-user-controls p { margin: 0; font-weight: 500; } /* Added font-weight for visibility */
+        .header-user-controls p { margin: 0; font-weight: 500; }
         #openAdminPanelButton, #openTicketModalButton { padding: 6px 12px; }
         #openAdminPanelButton { background-color: #ffc107; color: #212529; }
         #openAdminPanelButton:hover { background-color: #e0a800; }
@@ -94,12 +94,11 @@
         #chat-input-area { display: flex; gap: 0.5rem; }
         #chat-input { flex-grow: 1; margin-bottom: 0; }
         textarea, select {
-            width: calc(100% - 24px); padding: 10px; border: 1px solid var(--border-color);
+            width: 100%; padding: 10px; border: 1px solid var(--border-color);
             border-radius: 4px; font-size: 1em; background-color: var(--input-bg); color: var(--text-color);
-            box-sizing: border-box;
+            box-sizing: border-box; /* Changed from width: calc */
         }
-        select { width: 100%; }
-
+        
         #post-chat-actions {
             display: flex;
             justify-content: flex-start; 
@@ -113,18 +112,15 @@
             align-items: center;
             gap: 0.75rem;
         }
-        #feedback-controls h3 {
-            margin: 0;
-            font-size: 1em;
-            font-weight: normal;
-        }
+        #feedback-controls h3 { margin: 0; font-size: 1em; font-weight: normal; }
         #feedback-buttons { display: flex; gap: 0.5rem; }
         
         #login-section { padding: 2rem; border: 1px solid var(--border-color); border-radius: 8px; }
         label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #495057; }
         input {
-            width: calc(100% - 24px); padding: 10px; margin-bottom: 1rem; border: 1px solid var(--border-color);
+            width: 100%; padding: 10px; margin-bottom: 1rem; border: 1px solid var(--border-color);
             border-radius: 4px; font-size: 1em; background-color: var(--input-bg); color: var(--text-color);
+            box-sizing: border-box; /* Changed from width: calc */
         }
         button {
             padding: 10px 15px; background-color: var(--primary-color); color: white;
@@ -139,20 +135,30 @@
         .error-message { color: var(--danger-color); font-weight: bold; }
         .success-message { color: #198754; font-weight: bold; }
 
-        #ticket-modal {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background-color: var(--container-bg); padding: 2rem; box-shadow: 0 5px 20px rgba(0,0,0,0.25);
-            z-index: 1000; border-radius: 8px; border-top: 5px solid var(--primary-color);
-            width: 90%; max-width: 500px;
+        /* --- UPDATED DIALOG STYLES --- */
+        dialog {
+            border: none; box-shadow: 0 8px 30px rgba(0,0,0,0.2); border-radius: 8px;
+            padding: 0;
         }
+        dialog::backdrop { background-color: rgba(0, 0, 0, 0.6); }
+
+        /* Specific styles for Ticket Modal Dialog */
+        #ticket-modal {
+             padding: 2rem; 
+             border-top: 5px solid var(--primary-color);
+             width: 90%; 
+             max-width: 500px;
+        }
+
+        /* Specific styles for Admin Modal Dialog */
+        #admin-modal {
+            width: 90%; max-width: 900px; height: 80vh; max-height: 700px;
+        }
+
         fieldset { border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 5px; }
         pre { white-space: pre-wrap; word-wrap: break-word; background-color: #e9ecef; padding: 10px; border-radius: 4px; font-size: 0.9em; }
         small { color: #6c757d; font-style: italic; }
-        dialog {
-            border: none; box-shadow: 0 8px 30px rgba(0,0,0,0.2); border-radius: 8px;
-            padding: 0; width: 90%; max-width: 900px; height: 80vh; max-height: 700px;
-        }
-        dialog::backdrop { background-color: rgba(0, 0, 0, 0.6); }
+        
         .admin-modal-container { display: flex; flex-direction: column; height: 100%; }
         .admin-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); }
         .admin-modal-header h2 { margin: 0; }
@@ -176,7 +182,6 @@
         <header class="app-header">
             <h1>AI4AI Knowledge Assistant</h1>
             <div id="user-profile-controls" class="header-user-controls hidden">
-                <!-- THE FIX IS HERE: Removed "Email:" text and strong tag -->
                 <p><span id="profile-email"></span></p>
                 <button id="openTicketModalButton">Create Support Ticket</button>
                 <div id="admin-controls-area" class="hidden"><button id="openAdminPanelButton">Admin Panel</button></div>
@@ -205,15 +210,16 @@
             <div id="feedback-controls">
                 <h3>Was this answer helpful?</h3>
                 <div id="feedback-buttons">
-                    <button id="helpfulButton">👍</button>
-                    <button id="notHelpfulButton">👎</button>
+                    <!-- ACCESSIBILITY FIX: Added aria-label -->
+                    <button id="helpfulButton" aria-label="Helpful">👍</button>
+                    <button id="notHelpfulButton" aria-label="Not helpful">👎</button>
                 </div>
                 <p id="feedback-message" class="success-message"></p>
             </div>
         </section>
         
-        <!-- Ticket Modal -->
-        <div id="ticket-modal" class="hidden">
+        <!-- Ticket Modal (NOW A DIALOG) -->
+        <dialog id="ticket-modal">
             <h2>New Support Ticket</h2>
             <label for="ticket-question">Your Question/Issue:</label>
             <textarea id="ticket-question" rows="4"></textarea>
@@ -223,7 +229,7 @@
             <button id="submitTicketButton">Submit Ticket</button>
             <button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button>
             <p id="ticket-submission-message" style="margin-top: 1rem;"></p>
-        </div>
+        </dialog>
     </div>
 
     <!-- Admin Modal -->

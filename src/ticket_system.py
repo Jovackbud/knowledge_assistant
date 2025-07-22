@@ -6,7 +6,6 @@ from .config import TICKET_TEAMS, TICKET_TEAM_DESCRIPTIONS
 from .services import shared_services
 
 # Import the necessary AI and math libraries
-from langchain_huggingface import HuggingFaceEmbeddings
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -58,14 +57,8 @@ class TeamSuggester:
             question_embedding_np = np.array(question_embedding)
             team_embeddings_np = np.array(self.team_embeddings)
 
-            # Manually calculate cosine similarity using numpy
-            # 1. Calculate dot product
-            dot_product = np.dot(team_embeddings_np, question_embedding_np)
-            # 2. Calculate norms
-            question_norm = np.linalg.norm(question_embedding_np)
-            team_norms = np.linalg.norm(team_embeddings_np, axis=1)
-            # 3. Compute similarities
-            similarities = dot_product / (team_norms * question_norm)
+            # For normalized embeddings, cosine similarity is just the dot product.
+            similarities = np.dot(team_embeddings_np, question_embedding_np)
 
             # 3. Find the highest score and the corresponding team.
             # We set a minimum threshold to avoid nonsensical suggestions for vague questions.

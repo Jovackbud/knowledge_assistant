@@ -1,6 +1,5 @@
 import logging
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from google.genai.types import EmbedContentConfig
 
 from .config import EMBEDDING_MODEL
 

@@ -23,6 +23,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # This includes the 'src', 'scripts', and 'prompts' directories
 COPY . .
 
+# Create a non-root user
+RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser
+
+# Switch to the non-root user
+USER appuser
+
 # 6. Make the startup script executable
 RUN chmod +x ./render-start.sh
 

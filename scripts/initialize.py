@@ -7,7 +7,7 @@ import os
 # Adjust the Python path to include the root directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.database_utils import init_all_databases, _create_sample_users_if_not_exist
+from src.database_utils import init_all_databases, create_sample_users_if_not_exist
 from src.document_updater import synchronize_documents
 import logging
 
@@ -40,3 +40,6 @@ def run_initialization():
         # Re-raise the exception to make it clear the startup failed.
         # This is better for debugging on Render.
         raise RuntimeError("Initialization failed, application cannot start.") from e
+    
+    if __name__ == "__main__":
+        run_initialization()

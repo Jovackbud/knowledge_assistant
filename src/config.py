@@ -4,21 +4,23 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from pydantic import BaseModel
+# from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 # --- API & Server Configuration ---
-# Define the list of allowed origins for CORS.
-ALLOWED_ORIGINS = [
-    # Always allow your local development environment
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-]
-
-# In production on Render, the RENDER_EXTERNAL_URL environment variable will be set.
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+
+# Define the list of allowed origins for CORS.
 if RENDER_EXTERNAL_URL:
-    ALLOWED_ORIGINS.append(f"https://{RENDER_EXTERNAL_URL}")
+    # Production environment
+    ALLOWED_ORIGINS = [f"https://{RENDER_EXTERNAL_URL}"]
+else:
+    # Local development environment
+    ALLOWED_ORIGINS = [
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
 
 # --- Document Configuration ---
 DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs")
