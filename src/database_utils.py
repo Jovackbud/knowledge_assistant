@@ -22,8 +22,8 @@ if not DATABASE_URL:
 
 # Create a single, reusable engine. This is more efficient than connecting repeatedly.
 try:
-    engine: Engine = create_engine(DATABASE_URL)
-    logger.info("✅ Successfully created SQLAlchemy engine for PostgreSQL.")
+    engine: Engine = create_engine(DATABASE_URL, connect_args={"connect_timeout": 31})
+    logger.info("✅ Successfully created SQLAlchemy engine for PostgreSQL with extended timeout.")
 except Exception as e:
     logger.error(f"❌ Failed to create SQLAlchemy engine: {e}", exc_info=True)
     raise
