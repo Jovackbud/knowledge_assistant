@@ -1,16 +1,4 @@
 services:
-  # NEW: One-off job for initial database setup and document sync.
-  # This runs ONCE on every deploy before the web service starts.
-  - name: initialization-job
-    type: job
-    plan: free
-    startCommand: python -m scripts.initialize
-    envVars:
-      - fromGroup: knowledge-assistant-app
-    disks:
-      - name: app-data
-        mountPath: /usr/src/app/database
-
   # Main web service for the application
   - name: knowledge-assistant-app
     type: web
@@ -21,17 +9,13 @@ services:
     healthCheck:
       path: /
       initialDelaySeconds: 90
-    disks:
-      - name: app-data
-        mountPath: /usr/src/app/database
-        sizeGB: 1
+    # The 'disks:' section is GONE.
 
   # Cron job service to synchronize documents
   - name: document-synchronizer
     type: cron
     plan: free
     schedule: "0 0 * * *"
-    # The command is wrapped in single quotes to avoid YAML parsing issues
     command: 'curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents'
     envVars:
       - key: SYNC_SECRET_TOKEN

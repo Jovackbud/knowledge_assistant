@@ -18,9 +18,11 @@ langchain-google-genai==2.1.8
 
 FlashRank==0.2.10
 
-# --- Vector Store Client ---
-# Using Pinecone for the vector database.
+# --- Database Client ---
+# Using Pinecone for the vector database and neon for app database.
 langchain-pinecone==0.2.9
+SQLAlchemy>=2.0.0
+psycopg2-binary
 
 # --- Data Ingestion & Utilities ---
 # For loading documents from S3-compatible storage (Cloudflare R2).

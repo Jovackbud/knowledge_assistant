@@ -3,16 +3,16 @@ load_dotenv()
 
 import sys
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("InitializationScript")
 
 # Adjust the Python path to include the root directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.database_utils import init_all_databases, create_sample_users_if_not_exist
 from src.document_updater import synchronize_documents
-import logging
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("InitializationScript")
 
 def run_initialization():
     """
