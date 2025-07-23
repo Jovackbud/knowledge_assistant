@@ -75,15 +75,8 @@ RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
 RERANKER_SCORE_THRESHOLD = 0.2
 LLM_GENERATION_MODEL = "gemini-2.5-flash"
 
-# --- Database Paths ---
-DB_PARENT_DIR_NAME = "database"
-DB_PARENT_DIR = Path(DB_PARENT_DIR_NAME)
-DB_PARENT_DIR.mkdir(exist_ok=True)
-
-TICKET_DB_PATH = DB_PARENT_DIR / "tickets.db"
-FEEDBACK_DB_PATH = DB_PARENT_DIR / "feedback.db"
-AUTH_DB_PATH = DB_PARENT_DIR / "auth_profiles.db"
-SYNC_STATE_FILE = DB_PARENT_DIR / "sync_state.json"
+# --- Path for Synchronization State ---
+SYNC_STATE_FILE = Path("/tmp/sync_state.json")
 
 # --- Ticket System ---
 TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]

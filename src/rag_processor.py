@@ -31,13 +31,13 @@ class RAGService:
         self.vector_store = vector_store
         self.llm = llm
         # We define a cache path on the persistent disk
-        cache_path = DB_PARENT_DIR / "cache"
+        cache_path = Path("/tmp/flashrank_cache")
         cache_path.mkdir(exist_ok=True) # Ensure the directory exists
         self.reranker = None
         if USE_RERANKER:
             try:
                 # We define a cache path on the persistent disk
-                cache_path = DB_PARENT_DIR / "cache"
+                cache_path = Path("/tmp/flashrank_cache")
                 cache_path.mkdir(exist_ok=True) # Ensure the directory exists
                 self.reranker = Ranker(model_name=RERANKER_MODEL, cache_dir=str(cache_path))
                 logger.info(f"RAG: Reranker '{RERANKER_MODEL}' initialized successfully.")
