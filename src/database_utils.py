@@ -42,6 +42,7 @@ def init_all_databases():
             init_auth_db(connection)
             init_ticket_db(connection)
             init_feedback_db(connection)
+            init_sync_state_db(connection)
             logger.info("✅ All database tables initialized/verified successfully.")
     except SQLAlchemyError as e:
         logger.error(f"❌ Database schema initialization failed: {e}", exc_info=True)
@@ -92,6 +93,18 @@ def init_feedback_db(connection):
     '''))
     connection.commit()
     logger.info("Feedback table verified.")
+
+def init_sync_state_db(connection):
+    """Initializes the SyncState table for tracking document versions."""
+    connection.execute(text('''
+        CREATE TABLE IF NOT EXISTS SyncState (
+            s3_key TEXT PRIMARY KEY,
+            etag TEXT NOT NULL,
+            last_synced_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    '''))
+    connection.commit()
+    logger.info("SyncState table verified.")
 
 # --- Data Access Functions ---
 
@@ -201,7 +214,7 @@ def get_recent_tickets(limit: int = 20) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch recent tickets: {e}", exc_info=True)
     return tickets
 
-# The sample user creation logic remains the same, just uses the new public functions.
+
 def create_sample_users_if_not_exist():
     sample_users = {
         "staff.hr@example.com": { "user_hierarchy_level": 0, "departments": ["HR"], "projects_membership": [], "contextual_roles": {} },
@@ -215,3 +228,35 @@ def create_sample_users_if_not_exist():
         if not get_user_profile(email):
             add_or_update_user_profile(email, data)
             logger.info(f"Created sample user: {email}")
+
+
+def load_sync_state_from_db() -> Dict[str, str]:
+    """Loads the document sync state (s3_key -> etag) from the database."""
+    sql = text("SELECT s3_key, etag FROM SyncState")
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(sql).fetchall()
+            # Use a dictionary comprehension for a clean and efficient conversion
+            return {row.s3_key: row.etag for row in result}
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to load sync state from database: {e}", exc_info=True)
+        return {} # Return empty dict on error to force a full sync
+
+def save_sync_state_to_db(state: Dict[str, str]):
+    """Saves the current sync state to the database, overwriting the old state."""
+    # This is an efficient way to sync: delete all old state and insert the new state.
+    # It's robust and simpler than calculating individual diffs.
+    delete_sql = text("DELETE FROM SyncState")
+    insert_sql = text("INSERT INTO SyncState (s3_key, etag) VALUES (:key, :etag)")
+    
+    try:
+        with engine.connect() as connection:
+            # Use a transaction to ensure atomicity
+            with connection.begin():
+                connection.execute(delete_sql)
+                if state: # Only try to insert if the state dict is not empty
+                    # Execute all inserts in a single batch
+                    connection.execute(insert_sql, [{"key": k, "etag": v} for k, v in state.items()])
+            logger.info(f"Successfully saved sync state for {len(state)} documents to the database.")
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to save sync state to database: {e}", exc_info=True)

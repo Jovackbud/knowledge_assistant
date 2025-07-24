@@ -24,11 +24,11 @@ def run_initialization():
         create_sample_users_if_not_exist()
         logger.info("Sample user creation step complete.")
 
-        # logger.info("Synchronizing documents...")
-        # synchronize_documents()
-        # logger.info("Document synchronization complete.")
+        logger.info("Synchronizing documents...")
+        synchronize_documents()
+        logger.info("Document synchronization complete.")
 
-        # logger.info("All initialization tasks finished successfully.")
+        logger.info("All initialization tasks finished successfully.")
 
     except Exception as e:
         logger.critical(f"A critical error occurred during initialization: {e}", exc_info=True)

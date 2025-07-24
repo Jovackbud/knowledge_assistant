@@ -75,9 +75,6 @@ RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
 RERANKER_SCORE_THRESHOLD = 0.2
 LLM_GENERATION_MODEL = "gemini-2.5-flash"
 
-# --- Path for Synchronization State ---
-SYNC_STATE_FILE = Path("/tmp/sync_state.json")
-
 # --- Ticket System ---
 TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]
 TICKET_TEAM_DESCRIPTIONS = {

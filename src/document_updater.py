@@ -16,12 +16,11 @@ from typing import Dict, List, Any, Optional
 
 from .utils import sanitize_tag
 from .services import shared_services
+from .database_utils import load_sync_state_from_db, save_sync_state_to_db
 
 from .config import (
-    PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, EMBEDDING_MODEL,
-    CHUNK_SIZE, CHUNK_OVERLAP, SYNC_STATE_FILE,
+    PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, CHUNK_SIZE, CHUNK_OVERLAP,
     DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_HIERARCHY_LEVEL, DEFAULT_ROLE_TAG,
-    KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS, HIERARCHY_LEVELS_CONFIG
 )
 
 logger = logging.getLogger("DocumentUpdater")
@@ -181,16 +180,12 @@ def scan_s3_bucket() -> Dict[str, str]:
     return current_state
 
 def load_sync_state() -> Dict[str, str]:
-    if not SYNC_STATE_FILE.exists(): return {}
-    try:
-        with open(SYNC_STATE_FILE, 'r') as f: return json.load(f)
-    except (json.JSONDecodeError, IOError): return {}
+    """Wrapper function to load sync state from the database."""
+    return load_sync_state_from_db()
 
 def save_sync_state(state: Dict[str, str]):
-    try:
-        with open(SYNC_STATE_FILE, 'w') as f: json.dump(state, f, indent=4)
-        logger.info(f"Saved current S3 sync state to '{SYNC_STATE_FILE}'.")
-    except IOError: logger.error("Failed to save sync state file.")
+    """Wrapper function to save sync state to the database."""
+    save_sync_state_to_db(state)
 
 def clear_metadata_cache():
     global _metadata_cache
