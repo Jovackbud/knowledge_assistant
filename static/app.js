@@ -403,11 +403,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Ticket Modal Logic ---
     openTicketModalButton.addEventListener('click', () => {
         ticketModal.showModal();
+        setTimeout(() => {
         ticketQuestionTextarea.value = currentQuestion || '';
         ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
         if (ticketQuestionTextarea.value) { ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true })); }
         else { ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>'; }
-    });
+    }, 50);
+});
 
     cancelTicketButton.addEventListener('click', () => { hideTicketModal(); });
 
