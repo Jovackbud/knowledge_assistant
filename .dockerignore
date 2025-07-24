@@ -1,27 +1,38 @@
-# .dockerignore
+# Docker-specific files are for the host, not the image
+Dockerfile
+docker-compose.yml
+.dockerignore
 
-# Git
+# Git history and configuration
 .git/
 .gitignore
 
-# Python
+# Environment variables - NEVER include these in the image
+.env
+.env.*
+
+# Python virtual environment and cache
+venv/
+.venv/
 __pycache__/
 *.pyc
-.venv/
-.env
 
-# VS Code
-.vscode/
-
-# Logs & Databases (these should not be in the image)
-*.log
+# Local databases and logs
 database/
 milvus/
+*.log
 
-# Local test files
+# IDE configuration
+.vscode/
+.idea/
+
+# Local data, test scripts, and documentation
+emails.txt
+sample_docs/
+scripts/bulk_add_users.py
 test_reranker.py
+*.md
 
-# Docker specific
-Dockerfile
-docker-compose.yml
+# Render platform configuration
 render.yaml
+render-start.sh

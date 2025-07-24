@@ -1,53 +1,38 @@
-# Bytecode and cache
-__pycache__/
-*.py[cod]
-*.so
+# IDE and Editor Configuration
+.vscode/
+.idea/
 
-# Virtual environments
+# Virtual Environments
 venv/
 .venv/
 ENV/
 env/
 
-# Environment variables
+# Environment Variables - NEVER commit these
 .env
 .env.*
+!.env.example
 
-# VS Code settings
-.vscode/
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*.so
 
-# PyCharm settings
-.idea/
-
-# Logs and debug output
-*.log
-
-# Data and artifacts
-data/
-datasets/
-sample_docs/
-database/
-milvus/
-
-# Model checkpoints and temporary files
-checkpoints/
-*.ckpt
-*.pt
-*.bin
-
-# JSON files (if generated, not source-controlled)
-*.json
-
-# Testing artifacts
+# Build & Test Artifacts
+build/
+dist/
+*.egg-info/
 test_reranker.py
 
-# Node.js (if using any front-end with Node)
-node_modules/
+# Logs and Local Databases
+*.log
+database/
+milvus/
 
 # OS-generated files
 .DS_Store
 Thumbs.db
 
-# Notebook outputs (optional if you prefer clean diffs)
-*.ipynb
-.env
+# Sensitive Data & Local-only Scripts
+emails.txt
+scripts/bulk_add_users.py
