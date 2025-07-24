@@ -75,18 +75,18 @@ def update_user_permissions_by_admin(target_email: str, new_permissions: Dict[st
     # Ensure essential fields have default values if not provided, especially for new profiles
     # For existing profiles, these will only apply if the field is missing (which shouldn't happen with get_user_profile's current design)
     # or if it was an invalid key in new_permissions and we want to ensure a default.
-    if "user_hierarchy_level" not in profile_data:
-        profile_data["user_hierarchy_level"] = DEFAULT_HIERARCHY_LEVEL
-        logger.info(f"Setting default user_hierarchy_level for '{target_email}'.")
-    if "departments" not in profile_data:
-        profile_data["departments"] = []
-        logger.info(f"Setting default departments for '{target_email}'.")
-    if "projects_membership" not in profile_data:
-        profile_data["projects_membership"] = []
-        logger.info(f"Setting default projects_membership for '{target_email}'.")
-    if "contextual_roles" not in profile_data:
-        profile_data["contextual_roles"] = {}
-        logger.info(f"Setting default contextual_roles for '{target_email}'.")
+    if HIERARCHY_LEVEL_KEY not in profile_data:
+        profile_data[HIERARCHY_LEVEL_KEY] = DEFAULT_HIERARCHY_LEVEL
+        logger.info(f"Setting default {HIERARCHY_LEVEL_KEY} for '{target_email}'.")
+    if DEPARTMENTS_KEY not in profile_data:
+        profile_data[DEPARTMENTS_KEY] = []
+        logger.info(f"Setting default {DEPARTMENTS_KEY} for '{target_email}'.")
+    if PROJECTS_KEY not in profile_data:
+        profile_data[PROJECTS_KEY] = []
+        logger.info(f"Setting default {PROJECTS_KEY} for '{target_email}'.")
+    if CONTEXTUAL_ROLES_KEY not in profile_data:
+        profile_data[CONTEXTUAL_ROLES_KEY] = {}
+        logger.info(f"Setting default {CONTEXTUAL_ROLES_KEY} for '{target_email}'.")
     
     # Ensure user_email is always present and correct
     profile_data["user_email"] = target_email

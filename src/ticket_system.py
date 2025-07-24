@@ -3,10 +3,10 @@ from typing import Optional, Dict
 
 # Use the new descriptions from config
 from .config import TICKET_TEAMS, TICKET_TEAM_DESCRIPTIONS
+from .services import shared_services
 
 # Import the necessary AI and math libraries
-from langchain_huggingface import HuggingFaceEmbeddings
-from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class TeamSuggester:
         logger.info("Initializing AI Team Suggester...")
         try:
             # We initialize the model here. This happens only ONCE when the app starts.
-            self.embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            self.embedding_model = shared_services.query_embedder
             
             # Prepare the team descriptions and their corresponding embeddings
             self.team_names = list(TICKET_TEAM_DESCRIPTIONS.keys())
@@ -53,7 +53,12 @@ class TeamSuggester:
 
             # 2. Calculate the similarity between the question and all team descriptions.
             # The result is a list of scores, e.g., [[0.1, 0.8, 0.3, 0.2]]
-            similarities = cosine_similarity([question_embedding], self.team_embeddings)[0]
+            # Convert lists to numpy arrays for calculation
+            question_embedding_np = np.array(question_embedding)
+            team_embeddings_np = np.array(self.team_embeddings)
+
+            # For normalized embeddings, cosine similarity is just the dot product.
+            similarities = np.dot(team_embeddings_np, question_embedding_np)
 
             # 3. Find the highest score and the corresponding team.
             # We set a minimum threshold to avoid nonsensical suggestions for vague questions.

@@ -4,27 +4,28 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from pydantic import BaseModel
+# from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 # --- API & Server Configuration ---
-# Define the list of allowed origins for CORS.
-ALLOWED_ORIGINS = [
-    # Always allow your local development environment
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-]
-
-# In production on Render, the RENDER_EXTERNAL_URL environment variable will be set.
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+
+# Define the list of allowed origins for CORS.
 if RENDER_EXTERNAL_URL:
-    ALLOWED_ORIGINS.append(f"https://{RENDER_EXTERNAL_URL}")
+    # Production environment
+    ALLOWED_ORIGINS = [f"https://{RENDER_EXTERNAL_URL}"]
+else:
+    # Local development environment
+    ALLOWED_ORIGINS = [
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
 
 # --- Document Configuration ---
 DOCS_FOLDER_NAME = os.getenv("DOCS_FOLDER", "sample_docs")
 DOCS_FOLDER = Path(DOCS_FOLDER_NAME)
 ALLOWED_EXTENSIONS = [".txt", ".pdf", ".md"]
-DOCS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # --- Document Metadata Defaults and Conventions ---
 DEFAULT_DEPARTMENT_TAG = "GENERAL"
@@ -38,8 +39,11 @@ KNOWN_DEPARTMENT_TAGS = [
     "LEGAL", "MARKETING", "OPERATIONS", "SALES"
 ]
 
+# --- Reranker Configuration ---
+USE_RERANKER = os.getenv("USE_RERANKER", "true").lower() in ("true", "1", "t")
+
 # --- Vector Store Configuration ---
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "knowledge-assistant-v2")
 
 ROLE_SPECIFIC_FOLDER_TAGS = {
     "lead_docs": "LEAD",
@@ -66,20 +70,13 @@ ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
 # --- Text Processing ---
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
 RERANKER_SCORE_THRESHOLD = 0.2
 LLM_GENERATION_MODEL = "gemini-2.5-flash"
 
-# --- Database Paths ---
-DB_PARENT_DIR_NAME = "database"
-DB_PARENT_DIR = Path(DB_PARENT_DIR_NAME)
-DB_PARENT_DIR.mkdir(exist_ok=True)
-
-TICKET_DB_PATH = DB_PARENT_DIR / "tickets.db"
-FEEDBACK_DB_PATH = DB_PARENT_DIR / "feedback.db"
-AUTH_DB_PATH = DB_PARENT_DIR / "auth_profiles.db"
-SYNC_STATE_FILE = DB_PARENT_DIR / "sync_state.json"
+# --- Path for Synchronization State ---
+SYNC_STATE_FILE = Path("/tmp/sync_state.json")
 
 # --- Ticket System ---
 TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]
@@ -142,7 +139,6 @@ FEEDBACK_NOT_HELPFUL = "👎"
 if __name__ == "__main__":
     print("--- Configuration Loaded ---")
     print(f"✅ Document Source Folder: '{DOCS_FOLDER_NAME}'")
-    print(f"✅ Local Database Directory: '{DB_PARENT_DIR_NAME}'")
     print(f"✅ Pinecone Index Name: '{PINECONE_INDEX_NAME}'")
     print(f"✅ Embedding Model: '{EMBEDDING_MODEL}'")
     print("--------------------------")

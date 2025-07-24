@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import json
 import logging
 from pathlib import Path
@@ -8,13 +9,13 @@ import boto3
 from botocore.exceptions import ClientError
 from pinecone.exceptions import NotFoundException
 
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import Pinecone as PineconeVectorStore
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import Dict, List, Any, Optional
 
 from .utils import sanitize_tag
+from .services import shared_services
 
 from .config import (
     PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, EMBEDDING_MODEL,
@@ -36,18 +37,22 @@ def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
     """
     Looks for a 'metadata.json' file in the current directory or any parent directory.
     This allows for inherited permissions. Caches results to avoid redundant S3 calls.
+    The loop logic is corrected to ensure the root directory is checked.
     """
     global _metadata_cache
     
-    # Check cache first
+    # Check cache first for the specific path to avoid re-traversal
     if start_path in _metadata_cache:
         return _metadata_cache[start_path]
 
     original_path = start_path
     current_dir = start_path
-    while current_dir != current_dir.parent:
-        # Check cache for parent directories as well during traversal
+    
+    # Use a 'while True' loop to ensure all levels, including the root, are checked.
+    while True:
+        # Check cache for the current directory level during traversal
         if current_dir in _metadata_cache:
+            # If a parent's metadata is already cached, use it and cache it for the original path too
             _metadata_cache[original_path] = _metadata_cache[current_dir]
             return _metadata_cache[current_dir]
 
@@ -56,12 +61,23 @@ def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
             response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=metadata_file_key)
             metadata_content = response['Body'].read().decode('utf-8')
             found_metadata = json.loads(metadata_content)
-            _metadata_cache[original_path] = found_metadata # Cache result
+            
+            # Cache the found metadata for both the current level and the original starting path
+            _metadata_cache[current_dir] = found_metadata
+            _metadata_cache[original_path] = found_metadata
             return found_metadata
         except (ClientError, json.JSONDecodeError):
-            current_dir = current_dir.parent
+            # Error means no metadata file at this level, so we'll continue to the parent
+            pass
+
+        # Break condition: if the current directory is the root, we stop after this iteration.
+        if current_dir == current_dir.parent:
+            break
+        
+        # Move to the parent directory for the next iteration.
+        current_dir = current_dir.parent
     
-    # If not found all the way to the root, cache the negative result
+    # If the loop completes without finding any metadata, cache the negative result for the original path
     _metadata_cache[original_path] = None
     return None
 
@@ -192,8 +208,8 @@ def synchronize_documents():
 
     logger.info("Starting document synchronization from S3/R2 to Pinecone...")
     try:
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=embeddings)
+        # The embeddings client is now passed in, not created here.
+        vector_store = PineconeVectorStore.from_existing_index(index_name=PINECONE_INDEX_NAME, embedding=shared_services.document_embedder)
         logger.info(f"Successfully connected to Pinecone index '{PINECONE_INDEX_NAME}'.")
 
         current_s3_state = scan_s3_bucket()
@@ -227,36 +243,71 @@ def synchronize_documents():
                     )
             logger.info(f"Finished processing deletions for {len(deleted_keys)} documents from Pinecone.")
 
-        # --- PROCESS ADDITIONS AND UPDATES ---
+        # --- PROCESS ADDITIONS AND UPDATES (BATCHED) ---
         files_to_process = new_keys.union(updated_keys)
         if not files_to_process:
             logger.info("No new or updated documents in S3/R2 to process.")
         else:
             logger.info(f"Processing {len(files_to_process)} new/updated documents from S3/R2...")
+            
+            # --- First, delete all vectors for files that will be updated ---
+            # This is more efficient than deleting inside the loop
+            updated_keys_to_delete = [k for k in updated_keys]
+            if updated_keys_to_delete:
+                logger.info(f"Deleting old vectors for {len(updated_keys_to_delete)} updated files before re-indexing.")
+                # Pinecone filter syntax allows for $in operator for batch deletes
+                vector_store.delete(filter={"source": {"$in": updated_keys_to_delete}})
+                logger.info("Deletion of vectors for updated files complete.")
+
+            all_texts_to_add = []
+            all_metadatas_to_add = []
+            all_ids_to_add = []
+
             for s3_key in files_to_process:
-                # For updated files, first delete existing chunks to avoid orphans.
-                # This also uses a resilient try/except block.
-                if s3_key in updated_keys:
-                    try:
-                        vector_store.delete(filter={"source": s3_key})
-                        logger.info(f"Deleted old chunks for updated S3 key '{s3_key}'.")
-                    except NotFoundException:
-                        logger.warning(
-                            f"Attempted to delete old chunks for updated key '{s3_key}' but none were found. "
-                            "Proceeding with adding new chunks."
-                        )
-
                 chunks = load_and_split_s3_document(s3_key)
-                if not chunks: continue
+                if not chunks:
+                    logger.warning(f"S3 key '{s3_key}' produced no chunks. Skipping.")
+                    continue
 
-                texts_to_add = [c['page_content'] for c in chunks]
-                metadatas_to_add = [c['metadata'] for c in chunks]
-                ids_to_add = [f"{s3_key}-{i}" for i in range(len(chunks))]
+                texts = [c['page_content'] for c in chunks]
+                metadatas = [c['metadata'] for c in chunks]
+                ids = [f"{s3_key}-{i}" for i in range(len(chunks))]
+                
+                all_texts_to_add.extend(texts)
+                all_metadatas_to_add.extend(metadatas)
+                all_ids_to_add.extend(ids)
+                logger.info(f"Prepared {len(texts)} chunks from S3 key '{s3_key}'.")
 
-                # Pinecone's add_texts is an "upsert" operation. It will add new vectors
-                # or update existing ones if the IDs already exist.
-                vector_store.add_texts(texts=texts_to_add, metadatas=metadatas_to_add, ids=ids_to_add)
-                logger.info(f"Upserted {len(texts_to_add)} chunks for S3 key '{s3_key}'.")
+            if all_texts_to_add:
+                # Define the size of our mini-batches to respect API limits (Google's limit is 100).
+                BATCH_SIZE = 100
+                total_chunks = len(all_texts_to_add)
+                logger.info(f"Preparing to upsert {total_chunks} total chunks in mini-batches of {BATCH_SIZE}...")
+
+                # Loop through the collected chunks in mini-batches
+                for i in range(0, total_chunks, BATCH_SIZE):
+                    # Slice the data for the current mini-batch
+                    batch_texts = all_texts_to_add[i:i + BATCH_SIZE]
+                    batch_metadatas = all_metadatas_to_add[i:i + BATCH_SIZE]
+                    batch_ids = all_ids_to_add[i:i + BATCH_SIZE]
+
+                    start_num = i + 1
+                    end_num = min(i + BATCH_SIZE, total_chunks)
+
+                    logger.info(f"Upserting mini-batch: chunks {start_num}-{end_num} of {total_chunks}...")
+
+                    # Perform the upsert for the current mini-batch
+                    vector_store.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
+                    logger.info(f"Successfully upserted mini-batch {start_num}-{end_num}.")
+
+                    # It's polite to add a small delay between batches to avoid hammering the API
+                    # especially if there are many batches. This helps with per-minute rate limits.
+                    if (i + BATCH_SIZE) < total_chunks:
+                        logger.info("Pausing for 60 seconds before the next mini-batch to respect per-minute rate limits...")
+                        time.sleep(60)
+                logger.info("All mini-batches have been processed successfully.")
+            else:
+                logger.warning("No processable chunks found in any of the new/updated files.")
 
         # After all operations are complete, save the current state for the next run.
         save_sync_state(current_s3_state)
