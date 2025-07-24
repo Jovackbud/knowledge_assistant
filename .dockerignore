@@ -35,4 +35,3 @@ test_reranker.py
 
 # Render platform configuration
 render.yaml
-render-start.sh
