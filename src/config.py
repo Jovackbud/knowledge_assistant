@@ -139,7 +139,6 @@ FEEDBACK_NOT_HELPFUL = "👎"
 if __name__ == "__main__":
     print("--- Configuration Loaded ---")
     print(f"✅ Document Source Folder: '{DOCS_FOLDER_NAME}'")
-    print(f"✅ Local Database Directory: '{DB_PARENT_DIR_NAME}'")
     print(f"✅ Pinecone Index Name: '{PINECONE_INDEX_NAME}'")
     print(f"✅ Embedding Model: '{EMBEDDING_MODEL}'")
     print("--------------------------")

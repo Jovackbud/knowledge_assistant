@@ -29,9 +29,6 @@ class RAGService:
     def __init__(self, vector_store: PineconeVectorStore, llm: ChatGoogleGenerativeAI):
         self.vector_store = vector_store
         self.llm = llm
-        # We define a cache path on the persistent disk
-        cache_path = Path("/tmp/flashrank_cache")
-        cache_path.mkdir(exist_ok=True) # Ensure the directory exists
         self.reranker = None
         if USE_RERANKER:
             try:

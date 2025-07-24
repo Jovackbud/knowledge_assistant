@@ -291,20 +291,20 @@ def synchronize_documents():
                     batch_metadatas = all_metadatas_to_add[i:i + BATCH_SIZE]
                     batch_ids = all_ids_to_add[i:i + BATCH_SIZE]
 
-                start_num = i + 1
-                end_num = min(i + BATCH_SIZE, total_chunks)
+                    start_num = i + 1
+                    end_num = min(i + BATCH_SIZE, total_chunks)
 
-                logger.info(f"Upserting mini-batch: chunks {start_num}-{end_num} of {total_chunks}...")
+                    logger.info(f"Upserting mini-batch: chunks {start_num}-{end_num} of {total_chunks}...")
 
-                # Perform the upsert for the current mini-batch
-                vector_store.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
-                logger.info(f"Successfully upserted mini-batch {start_num}-{end_num}.")
+                    # Perform the upsert for the current mini-batch
+                    vector_store.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
+                    logger.info(f"Successfully upserted mini-batch {start_num}-{end_num}.")
 
-                # It's polite to add a small delay between batches to avoid hammering the API
-                # especially if there are many batches. This helps with per-minute rate limits.
-                if (i + BATCH_SIZE) < total_chunks:
-                    logger.info("Pausing for 20 seconds before the next mini-batch to respect per-minute rate limits...")
-                    time.sleep(20)
+                    # It's polite to add a small delay between batches to avoid hammering the API
+                    # especially if there are many batches. This helps with per-minute rate limits.
+                    if (i + BATCH_SIZE) < total_chunks:
+                        logger.info("Pausing for 20 seconds before the next mini-batch to respect per-minute rate limits...")
+                        time.sleep(20)
                 logger.info("All mini-batches have been processed successfully.")
             else:
                 logger.warning("No processable chunks found in any of the new/updated files.")

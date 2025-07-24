@@ -463,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.user_profile) {
                 console.log("Session validated. Resuming for:", data.user_profile.user_email);
                 updateUIForUserProfile(data.user_profile);
-_            } else {
+            } else {
                 throw new Error("Profile not found in session response.");
             }
         } catch (error) {

@@ -36,5 +36,5 @@ def run_initialization():
         # This is better for debugging on Render.
         raise RuntimeError("Initialization failed, application cannot start.") from e
     
-    if __name__ == "__main__":
+if __name__ == "__main__":
         run_initialization()
