@@ -18,13 +18,13 @@ class SharedServices:
             # Client optimized for embedding documents to be stored
             self.document_embedder = GoogleGenerativeAIEmbeddings(
                 model=EMBEDDING_MODEL,
-                task_type="retrieval_document"
+                task_type="RETRIEVAL_DOCUMENT"
             )
             
             # Client optimized for embedding search queries
             self.query_embedder = GoogleGenerativeAIEmbeddings(
                 model=EMBEDDING_MODEL,
-                task_type="retrieval_query"
+                task_type="RETRIEVAL_QUERY"
             )
             logger.info("✅ Shared Google document and query embedders loaded successfully.")
         except Exception as e:

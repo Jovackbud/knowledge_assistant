@@ -10,7 +10,6 @@ from .config import (
 logger = logging.getLogger(__name__)
 
 
-# The new, simplified function in src/auth_service.py
 def fetch_user_access_profile(user_email: str) -> Optional[UserProfile]:
     """
     Fetch user profile with attributes for the advanced hybrid RBAC/ABAC.
@@ -19,7 +18,7 @@ def fetch_user_access_profile(user_email: str) -> Optional[UserProfile]:
     if not user_email or not isinstance(user_email, str) or "@" not in user_email:
         logger.warning(f"Attempted to fetch profile with invalid email: '{user_email}'.")
         return None
-
+    user_email = user_email.lower()
     try:
         profile = get_user_profile(user_email)
         if not profile:
@@ -38,6 +37,7 @@ def update_user_permissions_by_admin(target_email: str, new_permissions: Dict[st
     Fetches an existing profile or creates a new one, validates and applies new permissions,
     ensures default values for essential fields, and saves the profile.
     """
+    target_email = target_email.lower()
     logger.info(f"Admin attempting to update permissions for user '{target_email}' with data: {new_permissions}")
 
     if not target_email or not isinstance(target_email, str) or "@" not in target_email:
@@ -106,6 +106,7 @@ def update_user_permissions_by_admin(target_email: str, new_permissions: Dict[st
     
 
 def remove_user_by_admin(target_email: str) -> Dict[str, Any]:
+    target_email = target_email.lower()
     logger.info(f"Admin attempting to remove user '{target_email}'.")
     if not target_email or not isinstance(target_email, str) or "@" not in target_email:
         logger.error(f"Invalid target_email provided for user removal: '{target_email}'")

@@ -19,16 +19,21 @@ from .services import shared_services
 from .config import (
     UserProfile,
     PINECONE_INDEX_NAME, EMBEDDING_MODEL, RERANKER_MODEL, LLM_GENERATION_MODEL, USE_RERANKER,
-    DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG, RERANKER_SCORE_THRESHOLD
+    DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG, RERANKER_SCORE_THRESHOLD,
+    LLM_REPHRASE_MODEL
 )
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    def __init__(self, vector_store: PineconeVectorStore, llm: ChatGoogleGenerativeAI):
+    def __init__(self, vector_store: PineconeVectorStore):
         self.vector_store = vector_store
-        self.llm = llm
+        self.llm_generation = ChatGoogleGenerativeAI(model=LLM_GENERATION_MODEL)
+        logger.info(f"RAG: Generation LLM '{LLM_GENERATION_MODEL}' initialized.")
+        # Smaller, faster LLM for rephrasing questions
+        self.llm_rephrase = ChatGoogleGenerativeAI(model=LLM_REPHRASE_MODEL)
+        logger.info(f"RAG: Rephrase LLM '{LLM_REPHRASE_MODEL}' initialized.")
         self.reranker = None
         if USE_RERANKER:
             try:
@@ -59,7 +64,15 @@ class RAGService:
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{question}")
             ])
-            logger.info("RAG: All prompts loaded successfully.")
+            # 1. A chain specifically for rephrasing the question
+            self.rephrase_chain = (
+                self.rephrase_prompt
+                | self.llm_rephrase
+                | StrOutputParser()
+                ).with_config(run_name="rephrase_question_step")
+
+
+            logger.info("RAG: All prompts and rephrase chain loaded successfully.")
         except FileNotFoundError as e:
             logger.error(f"FATAL: Prompt file not found: {e}. Please ensure it exists.")
             raise
@@ -80,7 +93,7 @@ class RAGService:
         vector_store = cls._init_vector_store(PINECONE_INDEX_NAME)
         
         # Now we call the new, simpler constructor with the correct arguments.
-        return cls(vector_store=vector_store, llm=llm)
+        return cls(vector_store=vector_store)
 
     @staticmethod
     def _init_vector_store(index_name: str) -> PineconeVectorStore:
@@ -135,16 +148,10 @@ class RAGService:
         Constructs a complete, history-aware, and permission-filtered RAG chain.
         This version cleanly separates the question rephrasing logic.
         """
-        # 1. A chain specifically for rephrasing the question
-        rephrase_chain = (
-            self.rephrase_prompt
-            | self.llm
-            | StrOutputParser()
-        ).with_config(run_name="rephrase_question_step")
 
         # 2. The main RAG chain that answers the question
         base_retriever = self.vector_store.as_retriever(
-            search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 10}
+            search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 7}
         )
 
         # This is the main processing chain
@@ -159,7 +166,7 @@ class RAGService:
             )
             .assign(context=lambda x: self.format_docs(x["docs"]))
             | self.prompt_template
-            | self.llm.with_config(run_name="final_answer_llm")
+            | self.llm_generation(run_name="final_answer_llm")
         )
 
         # 3. The final conversational chain that decides whether to rephrase or not
@@ -169,7 +176,7 @@ class RAGService:
                 return RunnablePassthrough.assign(question=lambda x: x['question']) | answer_chain
             else:
                 # If there is chat history, rephrase the question first
-                return RunnablePassthrough.assign(question=rephrase_chain) | answer_chain
+                return RunnablePassthrough.assign(question=self.rephrase_chain) | answer_chain
         
         # This uses the router function to create the final, complete chain
         conversational_rag_chain = RunnableLambda(route)

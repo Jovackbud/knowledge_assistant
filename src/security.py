@@ -65,7 +65,7 @@ def get_current_active_user(token: str) -> UserProfile:
         if email_from_token is None:
             raise AuthException(detail="Invalid token: Subject (email) missing.")
         
-        email: str = email_from_token
+        email: str = email_from_token.lower()
 
     except JWTError:
         raise AuthException(detail="Invalid token: Could not validate credentials.")
