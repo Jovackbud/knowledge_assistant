@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Visibility & UI Functions ---
     function showLogin() {
-        [userProfileControls, chatSection, postChatActions, ticketModal, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
+        [userProfileControls, chatSection, postChatActions, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
         loginSection.classList.remove('hidden');
     }
 
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     chatInput.addEventListener('input', () => {
         chatInput.style.height = 'auto';
-        chatInput.style.height = `${Math.min(chatInput.scrollHeight, 150)}px`;
+        chatInput.style.height = `${Math.min(chatInput.scrollHeight, 450)}px`;
     });
 
     // --- Event Listeners ---
@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Logout failed, but clearing client-side state anyway:", error);
         } finally {
             localStorage.removeItem('knowledgeAssistantProfile');
+            chatSection.classList.remove('chat-active');
             currentUserEmail = null; currentUserProfile = null;
             currentQuestion = null; currentAnswer = null; chatHistory = [];
             contextualRolesObject = {};
@@ -198,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const handleSend = async () => {
+        chatSection.classList.add('chat-active');
         const prompt = chatInput.value.trim();
         if (!prompt || !currentUserEmail) return;
         appendMessage('user', prompt);
@@ -408,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
         if (ticketQuestionTextarea.value) { ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true })); }
         else { ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>'; }
-    }, 50);
+    }, 30);
 });
 
     cancelTicketButton.addEventListener('click', () => { hideTicketModal(); });

@@ -166,7 +166,7 @@ class RAGService:
             )
             .assign(context=lambda x: self.format_docs(x["docs"]))
             | self.prompt_template
-            | self.llm_generation(run_name="final_answer_llm")
+            | self.llm_generation.with_config(run_name="final_answer_llm")
         )
 
         # 3. The final conversational chain that decides whether to rephrase or not

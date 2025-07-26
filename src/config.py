@@ -70,7 +70,7 @@ ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
 # --- Text Processing ---
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
-EMBEDDING_MODEL = "models/gemini-embedding-001"
+EMBEDDING_MODEL = "models/text-embedding-004"
 RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
 RERANKER_SCORE_THRESHOLD = 0.2
 LLM_GENERATION_MODEL = "gemini-2.5-flash-lite"
