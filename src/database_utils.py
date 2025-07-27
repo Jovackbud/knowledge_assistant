@@ -8,8 +8,8 @@ from sqlalchemy import create_engine, text, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from .config import (
-    UserProfile,
-    DEFAULT_HIERARCHY_LEVEL
+    UserProfile, DEFAULT_HIERARCHY_LEVEL, USER_EMAIL_KEY, HIERARCHY_LEVEL_KEY, DEPARTMENTS_KEY,
+    PROJECTS_KEY, CONTEXTUAL_ROLES_KEY, IS_ADMIN_KEY
 )
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ if not DATABASE_URL:
 
 # Create a single, reusable engine. This is more efficient than connecting repeatedly.
 try:
-    engine: Engine = create_engine(DATABASE_URL, connect_args={"connect_timeout": 31})
+    engine: Engine = create_engine(DATABASE_URL, connect_args={"connect_timeout": 31}, pool_recycle=1800)
     logger.info("✅ Successfully created SQLAlchemy engine for PostgreSQL with extended timeout.")
 except Exception as e:
     logger.error(f"❌ Failed to create SQLAlchemy engine: {e}", exc_info=True)
@@ -53,10 +53,11 @@ def init_auth_db(connection):
     connection.execute(text('''
         CREATE TABLE IF NOT EXISTS UserAccessProfile (
             user_email TEXT PRIMARY KEY,
-            user_hierarchy_level INTEGER DEFAULT 0 NOT NULL,
+            user_hierarchy_level INTEGER DEFAULT 0 NOT NULL CHECK (user_hierarchy_level BETWEEN 0 AND 3),
             departments JSONB DEFAULT '[]'::jsonb NOT NULL,
             projects_membership JSONB DEFAULT '[]'::jsonb NOT NULL,
-            contextual_roles JSONB DEFAULT '{}'::jsonb NOT NULL
+            contextual_roles JSONB DEFAULT '{}'::jsonb NOT NULL,
+                            is_admin BOOLEAN DEFAULT FALSE NOT NULL
         )
     '''))
     connection.commit()
@@ -146,30 +147,41 @@ def save_feedback(user_email: str, question: str, answer: str, rating: str) -> b
         logger.error(f"Feedback save failed for {user_email}: {e}", exc_info=True)
         return False
 
+# In src/database_utils.py, replace the whole function
+
 def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool:
+    """
+    Adds a new user or updates an existing one. This version uses shared constants
+    for keys to prevent mismatches with the service layer.
+    """
     sql = text("""
-        INSERT INTO UserAccessProfile (user_email, user_hierarchy_level, departments, projects_membership, contextual_roles)
-        VALUES (:email, :level, :depts, :projs, :roles)
+        INSERT INTO useraccessprofile (user_email, user_hierarchy_level, departments, projects_membership, contextual_roles, is_admin)
+        VALUES (:email, :level, :depts, :projs, :roles, :is_admin)
         ON CONFLICT (user_email) DO UPDATE SET
             user_hierarchy_level = EXCLUDED.user_hierarchy_level,
             departments = EXCLUDED.departments,
             projects_membership = EXCLUDED.projects_membership,
-            contextual_roles = EXCLUDED.contextual_roles
+            contextual_roles = EXCLUDED.contextual_roles,
+            is_admin = EXCLUDED.is_admin
     """)
     try:
         with engine.connect() as connection:
-            connection.execute(sql, {
+            # By using the imported constants for keys, we guarantee they match the keys
+            # used in auth_service when building the profile_data dictionary.
+            params = {
                 "email": email,
-                "level": int(profile_data.get("user_hierarchy_level", DEFAULT_HIERARCHY_LEVEL)),
-                "depts": json.dumps(profile_data.get("departments", [])),
-                "projs": json.dumps(profile_data.get("projects_membership", [])),
-                "roles": json.dumps(profile_data.get("contextual_roles", {}))
-            })
+                "level": int(profile_data.get(HIERARCHY_LEVEL_KEY, DEFAULT_HIERARCHY_LEVEL)),
+                "depts": json.dumps(profile_data.get(DEPARTMENTS_KEY, [])),
+                "projs": json.dumps(profile_data.get(PROJECTS_KEY, [])),
+                "roles": json.dumps(profile_data.get(CONTEXTUAL_ROLES_KEY, {})),
+                "is_admin": profile_data.get(IS_ADMIN_KEY, False)
+            }
+            connection.execute(sql, params)
             connection.commit()
             logger.info(f"User profile for {email} added/updated successfully.")
             return True
-    except SQLAlchemyError as e:
-        logger.error(f"Profile update failed for {email}: {e}", exc_info=True)
+    except Exception as e: # Broader exception to catch any potential issue during execution
+        logger.error(f"Profile update/add failed for {email}: {e}", exc_info=True)
         return False
 
 def get_user_profile(email: str) -> Optional[UserProfile]:
@@ -221,7 +233,7 @@ def create_sample_users_if_not_exist():
         "lead.it.project_alpha@example.com": { "user_hierarchy_level": 2, "departments": ["IT"], "projects_membership": ["PROJECT_ALPHA", "PROJECT_INTERNAL_INFRA"], "contextual_roles": { "PROJECT_ALPHA": ["LEAD"], "IT": ["ADMIN_ROLE"] } },
         "exec.finance@example.com": { "user_hierarchy_level": 2, "departments": ["FINANCE"], "projects_membership": ["PROJECT_BUDGET_Q4"], "contextual_roles": { "FINANCE": ["DEPARTMENT_HEAD"] } },
         "general.user@example.com": { "user_hierarchy_level": 0, "departments": [], "projects_membership": [], "contextual_roles": {} },
-        "admin.user@example.com": { "user_hierarchy_level": 3, "departments": ["IT", "HR", "FINANCE", "LEGAL", "MARKETING", "OPERATIONS", "SALES"], "projects_membership": [], "contextual_roles": {} }
+        "admin.user@example.com": { "user_hierarchy_level": 0, "departments": ["IT"], "is_admin": True, "projects_membership": [], "contextual_roles": {} }
     }
     logger.info("Checking for and creating sample users if they don't exist in external DB...")
     for email, data in sample_users.items():

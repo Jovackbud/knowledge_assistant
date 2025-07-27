@@ -62,7 +62,7 @@ class RAGService:
             self.prompt_template = ChatPromptTemplate.from_messages([
                 ("system", system_prompt_content),
                 MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{question}")
+                ("human", "Original Question: {question}\nRephrased Question: {retrieval_question}")
             ])
             # 1. A chain specifically for rephrasing the question
             self.rephrase_chain = (
@@ -146,42 +146,50 @@ class RAGService:
     def get_rag_chain(self, user_profile: Optional[UserProfile], chat_history: List[Dict[str, str]]):
         """
         Constructs a complete, history-aware, and permission-filtered RAG chain.
-        This version cleanly separates the question rephrasing logic.
+        This version passes both the original and rephrased question to the final LLM.
         """
 
-        # 2. The main RAG chain that answers the question
         base_retriever = self.vector_store.as_retriever(
             search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 7}
         )
 
-        # This is the main processing chain
-        answer_chain = (
+        # 1. Define the input preparation chain. This creates the 'retrieval_question'.
+        prepare_inputs_chain = RunnableLambda(
+            lambda x: {
+                "question": x["question"],
+                "chat_history": x["chat_history"],
+                # If no history, retrieval_question is the same as the original.
+                # If there is history, invoke the rephrase_chain.
+                "retrieval_question": x["question"] if not x.get("chat_history") else self.rephrase_chain.invoke(x)
+            },
+            name="prepare_inputs_step"
+        )
+
+        # 2. Define the main RAG processing chain.
+        rag_chain = (
             RunnablePassthrough.assign(
                 docs=RunnableLambda(
                     lambda x: self.rerank_and_filter_documents(
-                        docs=base_retriever.invoke(x["question"]), # Use the rephrased question
-                        question=x["question"]
+                        # Use the rephrased question for retrieval
+                        docs=base_retriever.invoke(x["retrieval_question"]),
+                        question=x["retrieval_question"]
                     )
                 ).with_config(run_name="retriever_and_reranker_step")
             )
             .assign(context=lambda x: self.format_docs(x["docs"]))
-            | self.prompt_template
-            | self.llm_generation.with_config(run_name="final_answer_llm")
         )
 
-        # 3. The final conversational chain that decides whether to rephrase or not
-        def route(info):
-            if not info.get("chat_history"):
-                # If no chat history, just use the original question
-                return RunnablePassthrough.assign(question=lambda x: x['question']) | answer_chain
-            else:
-                # If there is chat history, rephrase the question first
-                return RunnablePassthrough.assign(question=self.rephrase_chain) | answer_chain
+        # 3. Define the final chain that assembles the prompt and calls the LLM.
+        final_chain = (
+            self.prompt_template
+            | self.llm_generation.with_config(run_name="final_answer_llm")
+            | StrOutputParser()
+        )
+
+         # 4. Combine them into the complete, final chain.
+        complete_chain = prepare_inputs_chain | rag_chain | final_chain
         
-        # This uses the router function to create the final, complete chain
-        conversational_rag_chain = RunnableLambda(route)
-        
-        return conversational_rag_chain
+        return complete_chain
 
     
     def _build_filter_expression(self, profile: Dict[str, Any]) -> Dict:

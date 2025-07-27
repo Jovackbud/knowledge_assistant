@@ -1,9 +1,8 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from typing import cast
 
 from .database_utils import get_user_profile
 from .config import UserProfile

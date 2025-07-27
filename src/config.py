@@ -1,9 +1,9 @@
 import os
-from typing import List, Dict, Any, TypedDict
+from typing import List, Dict, Any, TypedDict, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 # from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
@@ -100,7 +100,7 @@ class SuggestTeamRequest(BaseModel):
 
 class CreateTicketRequest(BaseModel):
     question_text: str
-    chat_history_json: str # Or use a more structured model like List[Dict[str, str]]
+    chat_history: List[Dict[str, str]] # Or use a more structured model like List[Dict[str, str]]
     selected_team: str
 
 class FeedbackRequest(BaseModel):
@@ -108,9 +108,16 @@ class FeedbackRequest(BaseModel):
     answer: str
     feedback_type: str # e.g., "👍" or "👎"
 
+class PermissionsModel(BaseModel):
+    user_hierarchy_level: Optional[int] = Field(None, ge=0, le=3) # ge=greater than or equal, le=less than or equal
+    departments: Optional[List[str]] = None
+    projects_membership: Optional[List[str]] = None
+    contextual_roles: Optional[Dict[str, List[str]]] = None
+    is_admin: Optional[bool] = None
+
 class UserPermissionsRequest(BaseModel):
     target_email: str
-    permissions: Dict[str, Any]
+    permissions: PermissionsModel
 
 class UserRemovalRequest(BaseModel):
     target_email: str
@@ -121,6 +128,7 @@ class UserProfile(TypedDict):
     departments: List[str]
     projects_membership: List[str]
     contextual_roles: Dict[str, List[str]]
+    is_admin: bool
 
 # --- Constants for Dictionary Keys ---
 USER_EMAIL_KEY = "user_email"
@@ -128,6 +136,7 @@ HIERARCHY_LEVEL_KEY = "user_hierarchy_level"
 DEPARTMENTS_KEY = "departments"
 PROJECTS_KEY = "projects_membership"
 CONTEXTUAL_ROLES_KEY = "contextual_roles"
+IS_ADMIN_KEY = "is_admin"
 
 # --- Constants for Feedback Ratings ---
 FEEDBACK_HELPFUL = "👍"

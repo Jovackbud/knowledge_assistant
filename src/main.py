@@ -69,11 +69,10 @@ def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> User
         )
 
 def get_current_admin_user(current_user: UserProfile  = Depends(get_current_user_profile)) -> UserProfile:
-    user_level = current_user.get("user_hierarchy_level")
-    if user_level != ADMIN_HIERARCHY_LEVEL:
+    if not current_user.get("is_admin"): # Check the boolean flag
         logger.warning(
             f"Admin access denied for user '{current_user.get('user_email')}'. "
-            f"Level: {user_level}, Required: {ADMIN_HIERARCHY_LEVEL}"
+            f"User is not flagged as an admin."
         )
         raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Forbidden: User does not have admin privileges.")
     
@@ -233,7 +232,7 @@ async def create_ticket_endpoint(request: CreateTicketRequest, current_user: Dic
     ticket_id = create_ticket(
         user_email=current_user["user_email"],
         question=request.question_text,
-        chat_history=request.chat_history_json,
+        chat_history=json.dumps(request.chat_history),
         final_selected_team=request.selected_team
     )
     if ticket_id is not None:
