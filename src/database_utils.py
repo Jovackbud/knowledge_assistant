@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, cast
 
 # Import SQLAlchemy components
 from sqlalchemy import create_engine, text, Engine
@@ -149,7 +149,7 @@ def save_feedback(user_email: str, question: str, answer: str, rating: str) -> b
 
 # In src/database_utils.py, replace the whole function
 
-def add_or_update_user_profile(email: str, profile_data: Dict[str, Any]) -> bool:
+def add_or_update_user_profile(email: str, profile_data: UserProfile) -> bool:
     """
     Adds a new user or updates an existing one. This version uses shared constants
     for keys to prevent mismatches with the service layer.
@@ -193,7 +193,7 @@ def get_user_profile(email: str) -> Optional[UserProfile]:
                 logger.warning(f"No profile found for {email} in database.")
                 return None
             # The database row can be directly converted to a dictionary-like object
-            return dict(result._mapping)
+            return cast(UserProfile, dict(result._mapping))
     except SQLAlchemyError as e:
         logger.error(f"Profile retrieval failed for {email}: {e}", exc_info=True)
         return None
@@ -238,7 +238,7 @@ def create_sample_users_if_not_exist():
     logger.info("Checking for and creating sample users if they don't exist in external DB...")
     for email, data in sample_users.items():
         if not get_user_profile(email):
-            add_or_update_user_profile(email, data)
+            add_or_update_user_profile(email, cast(UserProfile, data))
             logger.info(f"Created sample user: {email}")
 
 

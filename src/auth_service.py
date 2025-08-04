@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, cast
 from .database_utils import get_user_profile, add_or_update_user_profile, delete_user_profile
 from .config import (
     UserProfile,
@@ -31,8 +31,6 @@ def fetch_user_access_profile(user_email: str) -> Optional[UserProfile]:
         logger.error(f"Error fetching profile for {user_email}: {e}", exc_info=True)
         return None
 
-
-# In src/auth_service.py
 
 def update_user_permissions_by_admin(target_email: str, new_permissions: PermissionsModel) -> Dict[str, Any]:
     """
@@ -85,13 +83,13 @@ def update_user_permissions_by_admin(target_email: str, new_permissions: Permiss
             HIERARCHY_LEVEL_KEY: permissions_from_form.get(HIERARCHY_LEVEL_KEY, DEFAULT_HIERARCHY_LEVEL),
             DEPARTMENTS_KEY: permissions_from_form.get(DEPARTMENTS_KEY, []),
             PROJECTS_KEY: permissions_from_form.get(PROJECTS_KEY, []),
-            CONTEXTUAL_ROLES_KEY: permissions_from_form.get(CONTEXTUAL_ROLES_KEY, {}),
+            CONTEXTUAL_ROLES_KEY: permissions_from_form.get(CONTEXTUAL_ROLES_KEY) or {},
             IS_ADMIN_KEY: permissions_from_form.get(IS_ADMIN_KEY, False)
         }
 
     # 4. Save the fully constructed final profile to the database.
     try:
-        if add_or_update_user_profile(target_email, final_profile):
+        if add_or_update_user_profile(target_email, cast(UserProfile, final_profile)):
             logger.info(f"Successfully committed final profile for '{target_email}': {final_profile}")
             # Fetch the latest profile to return the actual state from DB
             updated_profile = get_user_profile(target_email)
