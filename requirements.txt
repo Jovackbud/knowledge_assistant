@@ -50,3 +50,7 @@ numpy
 # For tracing and debugging RAG pipelines with LangSmith.
 # Can be removed for a minimal deployment.
 langsmith==0.4.5
+
+# --- bulk creating users from Excel file ---
+pandas
+openpyxl

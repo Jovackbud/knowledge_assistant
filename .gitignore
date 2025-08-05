@@ -23,6 +23,7 @@ build/
 dist/
 *.egg-info/
 test_reranker.py
+AI4AI_Staff.xlsx
 
 # Logs and Local Databases
 *.log
@@ -35,4 +36,3 @@ Thumbs.db
 
 # Sensitive Data & Local-only Scripts
 emails.txt
-scripts/bulk_add_users.py
