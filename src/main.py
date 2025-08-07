@@ -312,3 +312,12 @@ async def view_recent_tickets(admin_user: UserProfile = Depends(get_current_admi
     except Exception as e:
         logger.error(f"Error fetching recent tickets for admin: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve recent tickets.")
+    
+@app.get("/healthz")
+async def health_check():
+    """
+    Basic health check endpoint designed to be hit by a cron job.
+    It confirms the application is running and responsive.
+    """
+    logger.info("Health check endpoint hit.")
+    return {"status": "ok"}
