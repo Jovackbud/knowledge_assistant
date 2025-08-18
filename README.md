@@ -1,4 +1,4 @@
-# Service Assistant Project
+# Service Assistant Project (https://ai4ai-knowledge-assistant.onrender.com/)
 
 This project is a service assistant application that uses a local LLM and a Milvus vector database to provide responses and manage information. It is designed to be run using Docker and Docker Compose for production-like environments, but can also be run locally for development. The frontend is a simple HTML page served directly by FastAPI.
 
