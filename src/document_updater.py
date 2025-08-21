@@ -16,12 +16,11 @@ from typing import Dict, List, Any, Optional
 
 from .utils import sanitize_tag
 from .services import shared_services
+from .database_utils import load_sync_state_from_db, save_sync_state_to_db
 
 from .config import (
-    PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, EMBEDDING_MODEL,
-    CHUNK_SIZE, CHUNK_OVERLAP, SYNC_STATE_FILE,
+    PINECONE_INDEX_NAME, ALLOWED_EXTENSIONS, CHUNK_SIZE, CHUNK_OVERLAP,
     DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_HIERARCHY_LEVEL, DEFAULT_ROLE_TAG,
-    KNOWN_DEPARTMENT_TAGS, ROLE_SPECIFIC_FOLDER_TAGS, HIERARCHY_LEVELS_CONFIG
 )
 
 logger = logging.getLogger("DocumentUpdater")
@@ -56,7 +55,7 @@ def find_metadata_file(start_path: Path) -> Optional[Dict[str, Any]]:
             _metadata_cache[original_path] = _metadata_cache[current_dir]
             return _metadata_cache[current_dir]
 
-        metadata_file_key = str(current_dir / "metadata.json").replace('\\', '/')
+        metadata_file_key = (current_dir / "metadata.json").as_posix()
         try:
             response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=metadata_file_key)
             metadata_content = response['Body'].read().decode('utf-8')
@@ -181,16 +180,12 @@ def scan_s3_bucket() -> Dict[str, str]:
     return current_state
 
 def load_sync_state() -> Dict[str, str]:
-    if not SYNC_STATE_FILE.exists(): return {}
-    try:
-        with open(SYNC_STATE_FILE, 'r') as f: return json.load(f)
-    except (json.JSONDecodeError, IOError): return {}
+    """Wrapper function to load sync state from the database."""
+    return load_sync_state_from_db()
 
 def save_sync_state(state: Dict[str, str]):
-    try:
-        with open(SYNC_STATE_FILE, 'w') as f: json.dump(state, f, indent=4)
-        logger.info(f"Saved current S3 sync state to '{SYNC_STATE_FILE}'.")
-    except IOError: logger.error("Failed to save sync state file.")
+    """Wrapper function to save sync state to the database."""
+    save_sync_state_to_db(state)
 
 def clear_metadata_cache():
     global _metadata_cache
@@ -284,8 +279,15 @@ def synchronize_documents():
                 total_chunks = len(all_texts_to_add)
                 logger.info(f"Preparing to upsert {total_chunks} total chunks in mini-batches of {BATCH_SIZE}...")
 
+                # Define the rate limit window in seconds (outside the loop)
+                RATE_LIMIT_WINDOW = 60.0
+
                 # Loop through the collected chunks in mini-batches
                 for i in range(0, total_chunks, BATCH_SIZE):
+
+                    # Record the start time of the minute-long window for this batch
+                    minute_start_time = time.time()
+
                     # Slice the data for the current mini-batch
                     batch_texts = all_texts_to_add[i:i + BATCH_SIZE]
                     batch_metadatas = all_metadatas_to_add[i:i + BATCH_SIZE]
@@ -300,11 +302,20 @@ def synchronize_documents():
                     vector_store.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
                     logger.info(f"Successfully upserted mini-batch {start_num}-{end_num}.")
 
-                    # It's polite to add a small delay between batches to avoid hammering the API
-                    # especially if there are many batches. This helps with per-minute rate limits.
-                    if (i + BATCH_SIZE) < total_chunks:
-                        logger.info("Pausing for 61 seconds before the next mini-batch to respect per-minute rate limits...")
-                        time.sleep(61)
+                    # check if this is the last batch to avoid sleeping unnecessarily at the end
+                    is_last_batch = (i + BATCH_SIZE) >= total_chunks
+                    if not is_last_batch:
+                        elapsed_time = time.time() - minute_start_time
+
+                        if elapsed_time < RATE_LIMIT_WINDOW:
+                            sleep_duration = RATE_LIMIT_WINDOW - elapsed_time
+                            logger.info(f"API call took {elapsed_time:.2f}s. Pausing for {sleep_duration:.2f}s to respect rate limit")
+                            time.sleep(sleep_duration)
+                        
+                        else:
+                            # if the call took longer than the window, we don't need to sleep
+                            logger.warning(f"API call took {elapsed_time:.2f}s.which is longer than the {RATE_LIMIT_WINDOW}s rate limit window. Continuing immediately")
+
                 logger.info("All mini-batches have been processed successfully.")
             else:
                 logger.warning("No processable chunks found in any of the new/updated files.")
