@@ -1,3 +1,4 @@
+```markdown
 # AI4AI Knowledge Assistant
 
 ## Project Description
@@ -56,7 +57,7 @@ Follow these steps to set up and run the AI4AI Knowledge Assistant locally or pr
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/jovackbud/ai4ai-knowledge-assistant.git
+    git clone https://github.com/your-repo/ai4ai-knowledge-assistant.git
     cd ai4ai-knowledge-assistant
     ```
 
@@ -116,4 +117,113 @@ JWT_SECRET_KEY="YOUR_SUPER_SECRET_RANDOM_KEY_AT_LEAST_32_CHARS" # Generate with:
 SYNC_SECRET_TOKEN="YOUR_SECURE_SYNC_TOKEN" # A long, random string for the /admin/sync_documents endpoint
 
 # --- CORS Configuration (for frontend) ---
-RENDER_EXTERNAL_URL="https://ai4ai-knowledge-assistant.onrender.com/" 
+RENDER_EXTERNAL_URL="your-app-name.onrender.com" # Your deployed frontend URL (optional, local dev will use localhost)
+```
+
+**Note on S3/R2 Credentials:** If deploying to a service like Render that supports connecting to S3-compatible storage directly via environment variables, you might only need `S3_BUCKET_NAME`. Ensure `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_ENDPOINT_URL` (if not AWS S3) are correctly configured for your environment.
+
+### Database Setup
+
+The application automatically initializes the necessary tables (`UserAccessProfile`, `tickets`, `feedback`, `SyncState`) on startup if they don't exist.
+
+**Example PostgreSQL Setup (using Docker):**
+
+```bash
+docker run --name ai4ai-postgres -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=ai4ai_db -p 5432:5432 -d postgres:16-alpine
+```
+Then, update `DATABASE_URL` in `.env` to `postgresql://user:password@localhost:5432/ai4ai_db`.
+
+### Document Preparation
+
+1.  **Create your knowledge base:**
+    *   In your S3 bucket (or `DOCS_FOLDER` if using local simulation), create a structure similar to your internal document hierarchy.
+    *   Place `metadata.json` files in directories to define access permissions (e.g., `department_tag`, `project_tag`, `hierarchy_level_required`, `role_tag_required`). These metadata files are inherited by subdirectories unless overridden.
+    *   Example `metadata.json`:
+        ```json
+        {
+          "department_tag": "HR",
+          "hierarchy_level_required": 1,
+          "role_tag_required": "MANAGER"
+        }
+        ```
+    *   Upload your `.txt`, `.pdf`, or `.md` documents.
+
+### Initial Document Synchronization
+
+The application will attempt to connect to Pinecone and your S3 bucket on startup. To perform the initial sync or any manual sync:
+
+1.  **Run the FastAPI application** (see "Running the Application" below).
+2.  **Trigger the sync endpoint** (e.g., via `curl` or Postman):
+    ```bash
+    curl -X POST "http://localhost:8000/admin/sync_documents" \
+         -H "X-Sync-Token: YOUR_SECURE_SYNC_TOKEN_FROM_ENV"
+    ```
+    This will start a background task to download, process, embed, and upload documents to Pinecone.
+
+### Running the Application
+
+Start the FastAPI application using Uvicorn:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+The `--reload` flag is useful for local development as it restarts the server on code changes. For production, remove this flag.
+
+The application will be accessible at `http://localhost:8000`.
+
+## API Endpoints
+
+The API includes endpoints for authentication, RAG queries, ticket management, feedback, and admin functions.
+
+*   **`GET /`**: Serves the `index.html` frontend.
+*   **`GET /healthz`**: Basic health check.
+*   **`POST /auth/login`**: Authenticate a user and set an `access_token` cookie.
+*   **`POST /auth/logout`**: Clear the `access_token` cookie.
+*   **`POST /auth/me`**: Get the current authenticated user's profile.
+*   **`POST /rag/chat`**: Main RAG endpoint to ask questions and get streamed AI responses.
+*   **`POST /tickets/suggest_team`**: Suggests a support team based on a question.
+*   **`POST /tickets/create`**: Creates a new support ticket.
+*   **`POST /feedback/record`**: Records user feedback on an AI answer.
+*   **`POST /admin/sync_documents`**: Triggers document synchronization (requires `X-Sync-Token` header).
+*   **`GET /admin/config_tags`**: (Admin only) Returns configured department tags.
+*   **`GET /admin/view_user_permissions/{email}`**: (Admin only) View a specific user's permissions.
+*   **`POST /admin/user_permissions`**: (Admin only) Update a user's permissions.
+*   **`POST /admin/remove_user`**: (Admin only) Remove a user.
+*   **`GET /admin/recent_tickets`**: (Admin only) View recent support tickets.
+
+## Admin Users and Sample Data
+
+On first run, the database will be initialized, and several sample user profiles will be created if they don't exist:
+
+*   `staff.hr@example.com`
+*   `lead.it.project_alpha@example.com`
+*   `exec.finance@example.com`
+*   `general.user@example.com`
+*   `admin.user@example.com` (This user has `is_admin: True` and can access admin endpoints)
+
+You can use `admin.user@example.com` to log in and manage other users via the admin endpoints (e.g., setting a user as an admin or modifying their access rights).
+
+## Directory Structure
+
+*   `main.py`: The main FastAPI application entry point, defining all API routes and dependencies.
+*   `config.py`: Centralized configuration for environment variables, constants, LLM models, Pinecone index, and Pydantic data models.
+*   `utils.py`: Contains utility functions like `sanitize_tag` for normalizing strings.
+*   `services.py`: Initializes and provides shared services across the application, such as Google Generative AI embedding models.
+*   `database_utils.py`: Handles all database connections (SQLAlchemy), schema initialization, and CRUD operations for user profiles, tickets, feedback, and sync state.
+*   `auth_service.py`: Contains the business logic for fetching, updating, and removing user access profiles.
+*   `security.py`: Manages JWT token creation, decoding, and FastAPI security dependencies for authentication.
+*   `document_updater.py`: Orchestrates the document synchronization process from S3/R2 to Pinecone, including downloading, loading, splitting, embedding, and upserting/deleting documents.
+*   `rag_processor.py`: Implements the RAG (Retrieval Augmented Generation) pipeline, including prompt templating, retriever setup, reranking with FlashRank, and LLM integration.
+*   `ticket_system.py`: Provides the AI-powered team suggestion logic and integrates with the database for ticket creation.
+*   `feedback_system.py`: Handles the logic for recording user feedback on AI responses.
+*   `prompts/`: A directory expected to contain `.md` files for LLM prompts (e.g., `rag_system_prompt.md`, `rephrase_question_prompt.md`).
+*   `static/`: Contains static frontend files (e.g., `index.html`) served by FastAPI.
+
+## Contributing
+
+Contributions are welcome! Please feel free to open issues or submit pull requests.
+
+## License
+
+This project is open-sourced under the MIT License.
+```
