@@ -56,7 +56,7 @@ Follow these steps to set up and run the AI4AI Knowledge Assistant locally or pr
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-repo/ai4ai-knowledge-assistant.git
+    git clone https://github.com/jovackbud/ai4ai-knowledge-assistant.git
     cd ai4ai-knowledge-assistant
     ```
 
