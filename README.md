@@ -1,187 +1,119 @@
-# Service Assistant Project
+# AI4AI Knowledge Assistant
 
-This project is a service assistant application that uses a local LLM and a Milvus vector database to provide responses and manage information. It is designed to be run using Docker and Docker Compose for production-like environments, but can also be run locally for development. The frontend is a simple HTML page served directly by FastAPI.
+## Project Description
 
-## Prerequisites
+The AI4AI Knowledge Assistant is a comprehensive, enterprise-grade AI application designed to provide secure and intelligent access to internal company knowledge. It leverages Retrieval Augmented Generation (RAG) to answer user queries, incorporates a robust Role-Based Access Control (RBAC) and Attribute-Based Access Control (ABAC) system for document access, and includes features like an AI-powered ticket system and user feedback mechanisms.
 
-*   **Python 3.8+:** Ensure Python is installed.
-*   **Docker Desktop:** (For Docker-based deployment) Ensure Docker Desktop (or Docker Engine with Docker Compose CLI plugin) is installed and running. Download from [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/).
-*   **Project Files:** Clone this repository.
-*   **Milvus Configuration Files:** (For Docker-based deployment) Ensure you have the `milvus` subdirectory in your project root, containing the necessary volume structure for Milvus (i.e., `milvus/volumes/etcd`, `milvus/volumes/minio`, `milvus/volumes/milvus`). The `docker-compose.yml` expects this structure for Milvus data persistence.
+The backend is built with FastAPI, utilizing Google's Generative AI models for embeddings and language generation, Pinecone for vector storage, and an S3-compatible bucket (like AWS S3 or Cloudflare R2) for document storage. PostgreSQL serves as the persistent database for user profiles, sync states, tickets, and feedback.
 
-## Setup Instructions
+## Features
 
-### 1. Environment and Dependencies
+*   **Retrieval Augmented Generation (RAG)**: Answers user questions by retrieving relevant information from a vast knowledge base, powered by Google Generative AI models.
+*   **Dynamic Access Control (RBAC/ABAC)**:
+    *   Documents are tagged with `department_tag`, `project_tag`, `hierarchy_level_required`, and `role_tag_required`.
+    *   Users are assigned `user_hierarchy_level`, `departments`, `projects_membership`, and `contextual_roles`.
+    *   Access to information is dynamically filtered based on the user's permissions, ensuring sensitive data is only accessible to authorized personnel.
+*   **Document Synchronization**: Automatically syncs documents from an S3-compatible bucket to Pinecone, detecting new, updated, and deleted files using ETags. Supports `.txt`, `.pdf`, and `.md` file types.
+*   **AI-Powered Ticket System**:
+    *   Suggests the most relevant support team (e.g., IT, HR, Legal) for a user's question using semantic similarity.
+    *   Allows users to create support tickets, recording the question, chat history, system-suggested team, and user-selected team.
+*   **User Feedback Mechanism**: Enables users to provide feedback (thumbs up/down) on AI answers, helping to improve the system over time.
+*   **Admin Panel**:
+    *   Manage user permissions (hierarchy level, department/project memberships, contextual roles, admin status).
+    *   View recent support tickets.
+    *   Trigger manual document synchronization.
+*   **Secure Authentication**: Implements JWT-based authentication using HTTP-only, secure cookies for session management.
+*   **Scalable Architecture**: Designed for cloud deployment with containerization support, leveraging managed services like Pinecone, S3, and PostgreSQL.
+*   **Health Check Endpoint**: A `/healthz` endpoint for monitoring application status.
 
-*   **Create a Virtual Environment (Recommended):**
+## Technologies Used
+
+*   **Backend Framework**: FastAPI
+*   **Vector Database**: Pinecone
+*   **Large Language Models (LLM) & Embeddings**: Google Generative AI (Gemini Flash, Text Embedding 004)
+*   **Document Storage**: AWS S3 or S3-compatible (e.g., Cloudflare R2)
+*   **Relational Database**: PostgreSQL (via SQLAlchemy)
+*   **Orchestration & RAG**: LangChain
+*   **Reranking**: FlashRank
+*   **Authentication**: `python-jose`, `passlib`
+*   **Cloud SDK**: Boto3 (for S3 interaction)
+*   **Data Validation**: Pydantic
+*   **Utilities**: NumPy, `python-dotenv`, `pathlib`, `re`, `logging`
+
+## Getting Started
+
+Follow these steps to set up and run the AI4AI Knowledge Assistant locally or prepare for deployment.
+
+### Prerequisites
+
+*   Python 3.9+
+*   Docker (optional, for database setup)
+*   An AWS account (or S3-compatible storage like Cloudflare R2)
+*   A Pinecone account
+*   A Google Cloud Project with Generative AI API enabled
+
+### Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-repo/ai4ai-knowledge-assistant.git
+    cd ai4ai-knowledge-assistant
+    ```
+
+2.  **Create and activate a virtual environment:**
     ```bash
     python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    # On Windows
+    .\venv\Scripts\activate
+    # On macOS/Linux
+    source venv/bin/activate
     ```
-*   **Install Dependencies:**
+
+3.  **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
-
-### 2. Milvus Setup (Required for RAG features)
-
-The application's RAG (Retrieval Augmented Generation) capabilities depend on Milvus.
-
-*   **Option A: Using Docker for Milvus (Recommended for Simplicity)**
-    *   If you have Docker, you can run Milvus using the provided `docker-compose.yml`.
-    *   To start the Milvus stack (and the application):
-        ```bash
-        docker-compose up -d --build
-        ```
-    *   If you only want to start the Milvus components (e.g., if running the app locally):
-        ```bash
-        docker-compose up -d etcd minio standalone
-        ```
-    *   Ensure your `.env.production` (or local environment variables) has `MILVUS_HOST=localhost` if running the FastAPI app locally and Milvus in Docker this way. If running the app within the main `docker-compose` setup, `MILVUS_HOST` should be `standalone`.
-
-*   **Option B: Local Milvus Installation**
-    *   Install Milvus natively on your system. Refer to the [official Milvus installation guide](https://milvus.io/docs/install_standalone-docker.md) (though this link is for Docker, find the appropriate guide for your OS if you prefer a native install).
-    *   Ensure Milvus is running and accessible. You might need to adjust `MILVUS_HOST` and `MILVUS_PORT` environment variables accordingly.
-
-### 3. Environment Variables
-
-*   **Create `.env.production` File (or set environment variables):**
-    *   In the root directory of the project, create a file named `.env.production` (or configure your system's environment variables).
-    *   Add the following (adjust as needed):
-        ```env
-        MILVUS_HOST=localhost # Or 'standalone' if running app within the main docker-compose
-        LLM_MODEL=gemma:2b    # Example model, ensure it's available via Ollama
-        PYTHONUNBUFFERED=1
-        DOCS_FOLDER=sample_docs_phase_1 # Relative to the './data' volume if using Docker for the app
-        OLLAMA_BASE_URL=http://localhost:11434 # Default Ollama URL
-        ```
-    *   **Note on `LLM_MODEL`**: The application uses Ollama. When running the FastAPI app locally (outside the main `docker-compose` setup), you'll need to have Ollama installed, running, and the specified model pulled (e.g., `ollama pull gemma:2b`). If Ollama is running on a different host/port, update `OLLAMA_BASE_URL`. When using `docker-compose up --build`, the `app` service will handle Ollama.
-
-### 4. Place Documents (Optional, for RAG)
-
-*   The application expects documents in a folder (default is `./data/sample_docs_phase_1/`).
-*   Create this directory and place your `.txt`, `.pdf`, or `.md` files there if you want to use the RAG features. The `init_all_databases()` function called on startup will attempt to process these.
-
-## Running the Application
-
-The application now runs as a single FastAPI service, which also serves the HTML frontend.
-
-*   **Option A: Using Docker Compose (Recommended for Production-like Environment)**
-    1.  **Configure `.env.production` for Docker:**
-        *   Set `MILVUS_HOST=standalone`.
-        *   The `LLM_MODEL` will be pulled by the `app` service's Ollama instance.
-        *   `OLLAMA_BASE_URL` will be `http://localhost:11434` (Ollama runs in the same container as the app).
-            ```env
-            MILVUS_HOST=standalone
-            LLM_MODEL=gemma:2b
-            PYTHONUNBUFFERED=1
-            DOCS_FOLDER=sample_docs_phase_1
-            OLLAMA_BASE_URL=http://localhost:11434
-            ```
-    2.  **Build and Run Containers:**
-        ```bash
-        docker-compose up --build -d
-        ```
-        The `-d` flag runs the containers in detached mode.
-    3.  **Accessing the Application:**
-        *   The HTML frontend is accessible at: [http://localhost:8000](http://localhost:8000)
-        *   API Documentation (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
-        *   API Documentation (ReDoc): [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-*   **Option B: Local Development (without Docker for the app itself)**
-    1.  **Ensure Prerequisites are Met:**
-        *   Python installed, virtual environment activated, dependencies installed.
-        *   Milvus is running and accessible (either via Docker or locally).
-        *   Ollama is installed, running, and the desired model is pulled (e.g., `ollama pull gemma:2b`).
-        *   Environment variables are set (e.g., in `.env.production` or system-wide), with `MILVUS_HOST=localhost` if Milvus is outside the app's direct environment.
-    2.  **Run the FastAPI Application using the script:**
-        ```bash
-        bash scripts/start.sh
-        ```
-        This script uses Uvicorn to run the application.
-    3.  **Accessing the Application:**
-        *   The HTML frontend is accessible at: [http://localhost:8000](http://localhost:8000)
-        *   API Documentation (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
-        *   API Documentation (ReDoc): [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-## Adding New Users for Local Testing
-
-User profiles for local testing and initial setup are managed within the `src/database_utils.py` file, specifically in the `_create_sample_users_if_not_exist` function.
-
-To add a new user:
-
-1.  **Edit `src/database_utils.py`**:
-    Open the file and locate the `sample_users` dictionary within the `_create_sample_users_if_not_exist` function.
-2.  **Add a New User Entry**:
-    Add a new entry to the dictionary using the user's email as the key. Ensure that the department and project tags used are valid according to the system's configuration (typically defined or expected by other parts of the system, like document tagging).
-
-    Here's an example structure for a new user:
-    ```python
-    "new.user@example.com": {
-        "user_hierarchy_level": 0,  # Defines access level, e.g., 0 for general, higher for more access
-        "departments": ["IT_DEPARTMENT"], # User's primary department(s)
-        "projects_membership": ["PROJECT_BETA"], # Projects the user is part of
-        "contextual_roles": {
-            # Roles within specific projects or departments
-            "PROJECT_BETA": ["DEVELOPER_ROLE"], 
-            "IT_DEPARTMENT": ["HELPDESK_ROLE"] 
-        }
-    }
+    If `requirements.txt` is not provided, you can generate one or install manually:
+    ```bash
+    pip install fastapi uvicorn langchain-pinecone langchain-google-genai langchain-community langchain-text-splitters boto3 python-dotenv pydantic sqlalchemy psycopg2-binary python-jose passlib[bcrypt] flashrank numpy
     ```
-    *   `user_hierarchy_level`, `departments`, `projects_membership`, and `contextual_roles` collectively define the user's access rights and how information is filtered or presented to them. Ensure these values, especially the string tags for departments, projects, and roles, are consistent with how they are used elsewhere (e.g., in document metadata or access control logic).
 
-3.  **Restart the FastAPI Application**:
-    After saving your changes to `src/database_utils.py`, the FastAPI application needs to be restarted.
-    *   If running with `docker-compose up`, you can restart the `app` service: `docker-compose restart app` or stop and restart all: `docker-compose down && docker-compose up --build -d`.
-    *   If running with `bash scripts/start.sh` or `uvicorn` directly, stop the server (Ctrl+C) and run the start command again.
+### Environment Variables
 
-    Upon restart, the `_create_sample_users_if_not_exist` function will execute, and if the new user's email is not already in the user database, their profile will be added.
+Create a `.env` file in the root directory of the project and populate it with the following:
 
-## Local LLM and Vector Database
+```env
+# --- Database Configuration ---
+DATABASE_URL="postgresql://user:password@host:port/dbname" # e.g., postgresql://postgres:mypassword@localhost:5432/ai4ai_db
 
-*   **LLM:** The application uses Ollama. When run locally (Option B for running the app), ensure Ollama is installed and serving the model. When run with Docker (Option A), the `app` container runs its own Ollama instance and pulls the model specified in `.env.production`.
-*   **Vector Database:** Milvus. Can be run via Docker (using the provided `docker-compose.yml`) or as a separate local installation. Data for Dockerized Milvus is persisted in `./milvus/volumes/`.
+# --- AWS S3 / R2 Configuration ---
+AWS_ACCESS_KEY_ID="YOUR_AWS_ACCESS_KEY_ID"
+AWS_SECRET_ACCESS_KEY="YOUR_AWS_SECRET_ACCESS_KEY"
+# For S3-compatible storage like R2, you might need an endpoint URL
+AWS_ENDPOINT_URL="YOUR_S3_COMPATIBLE_ENDPOINT_URL" # e.g., https://<account_id>.r2.cloudflarestorage.com
+S3_BUCKET_NAME="your-knowledge-bucket" # Name of your S3/R2 bucket
+DOCS_FOLDER="sample_docs" # Local folder to simulate S3 structure for document updates. Can be 'remote_docs' for S3.
 
-## Stopping the Application
+# --- Pinecone Configuration ---
+PINECONE_API_KEY="YOUR_PINECONE_API_KEY"
+PINECONE_ENVIRONMENT="YOUR_PINECONE_ENVIRONMENT" # e.g., us-east-1
+PINECONE_INDEX_NAME="knowledge-assistant-v2"
 
-*   **Local `start.sh` / Uvicorn:** Press `Ctrl+C` in the terminal where the script or Uvicorn is running.
-*   **Docker Compose:**
-    *   If running in detached mode (`-d`), use:
-        ```bash
-        docker-compose down
-        ```
-    *   If running in the foreground, press `Ctrl+C` in the terminal, then run `docker-compose down`.
-    *   To also remove the Milvus data volumes (BE CAREFUL, this deletes Milvus data from `./milvus/volumes/`):
-        ```bash
-        # docker-compose down -v
-        ```
+# --- Google Generative AI Configuration ---
+GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY" # Used by langchain-google-genai
+EMBEDDING_MODEL="models/text-embedding-004"
+LLM_GENERATION_MODEL="gemini-2.5-flash-lite"
+LLM_REPHRASE_MODEL="gemini-2.5-flash-lite"
 
-## Project Structure (Simplified)
+# --- Reranker Configuration ---
+USE_RERANKER="true" # Set to "false" to disable reranking
+RERANKER_MODEL="ms-marco-MiniLM-L-12-v2" # Example model, refer to FlashRank docs
 
-```
-.
-├── data/                    # Default directory for documents (e.g., sample_docs_phase_1)
-│   └── sample_docs_phase_1/
-│       └── example.txt
-├── milvus/                  # Milvus data volumes (for Docker)
-│   └── volumes/
-├── scripts/                 # Helper scripts
-│   └── start.sh             # Script to run the FastAPI app locally
-├── src/                     # Source code
-│   ├── __init__.py
-│   ├── auth_service.py      # User authentication logic
-│   ├── config.py            # Configuration models (Pydantic)
-│   ├── database_utils.py    # Database initialization & utilities (incl. sample users)
-│   ├── document_updater.py  # For processing and adding documents to Milvus
-│   ├── feedback_system.py   # Feedback recording logic
-│   ├── main.py              # FastAPI application entry point
-│   ├── rag_processor.py     # RAG logic (Langchain, Milvus, Ollama)
-│   └── ticket_system.py     # Ticketing logic
-├── static/                  # Static frontend files
-│   └── index.html           # HTML frontend served by FastAPI
-├── .env.production          # Environment variables (user-created, gitignored)
-├── docker-compose.yml       # Docker Compose configuration
-├── Dockerfile               # Dockerfile for the application
-├── requirements.txt         # Python dependencies
-└── README.md                # This file
-```
+# --- JWT Authentication ---
+JWT_SECRET_KEY="YOUR_SUPER_SECRET_RANDOM_KEY_AT_LEAST_32_CHARS" # Generate with: openssl rand -hex 32
+
+# --- Admin Sync Token (for scheduled syncs) ---
+SYNC_SECRET_TOKEN="YOUR_SECURE_SYNC_TOKEN" # A long, random string for the /admin/sync_documents endpoint
+
+# --- CORS Configuration (for frontend) ---
+RENDER_EXTERNAL_URL="https://ai4ai-knowledge-assistant.onrender.com/" 
