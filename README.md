@@ -56,7 +56,7 @@ Follow these steps to set up and run the AI4AI Knowledge Assistant locally or pr
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-repo/ai4ai-knowledge-assistant.git
+    git clone https://github.com/jovackbud/ai4ai-knowledge-assistant.git
     cd ai4ai-knowledge-assistant
     ```
 
@@ -116,4 +116,4 @@ JWT_SECRET_KEY="YOUR_SUPER_SECRET_RANDOM_KEY_AT_LEAST_32_CHARS" # Generate with:
 SYNC_SECRET_TOKEN="YOUR_SECURE_SYNC_TOKEN" # A long, random string for the /admin/sync_documents endpoint
 
 # --- CORS Configuration (for frontend) ---
-RENDER_EXTERNAL_URL="your-app-name.onrender.com" # Your deployed frontend URL (optional, local dev will use localhost)
+RENDER_EXTERNAL_URL="https://ai4ai-knowledge-assistant.onrender.com/" 
