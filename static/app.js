@@ -35,8 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminPermissionsForm = document.getElementById('admin-permissions-form');
     const targetUserEmailInput = document.getElementById('target-user-email');
     const targetHierarchyLevelInput = document.getElementById('target-hierarchy-level');
-    const targetDepartmentsInput = document.getElementById('target-departments');
-    const knownDepartmentsDatalist = document.getElementById('known-departments-list');
+    // REMOVED: const targetDepartmentsInput = document.getElementById('target-departments');
     const targetProjectsInput = document.getElementById('target-projects');
     const roleContextTagInput = document.getElementById('role-context-tag');
     const roleNameTagInput = document.getElementById('role-name-tag');
@@ -54,6 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const ticketsLoadingMessage = document.getElementById('tickets-loading-message');
     const ticketsTableContainer = document.getElementById('tickets-table-container');
     const ticketsTableBody = document.getElementById('tickets-table-body');
+    // --- NEW SELECTORS for simplified admin panel ---
+    const targetIsAdminInput = document.getElementById('target-is-admin');
+    const targetDepartmentsGroup = document.getElementById('target-departments-group');
+
 
     // --- State Variables ---
     let currentUserProfile = null;
@@ -62,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentAnswer = null;
     let chatHistory = [];
     let contextualRolesObject = {};
-    const ADMIN_LEVEL = 3;
+    // REMOVED: const ADMIN_LEVEL = 3; // No longer needed, logic uses is_admin flag
 
     // --- Helper for fetch options ---
     const getFetchOptions = (method = 'GET', body = null) => {
@@ -79,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Visibility & UI Functions ---
     function showLogin() {
-        [userProfileControls, chatSection, postChatActions, ticketModal, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
+        [userProfileControls, chatSection, postChatActions, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
         loginSection.classList.remove('hidden');
     }
 
@@ -89,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         postChatActions.classList.add('hidden'); // Keep actions hidden until a chat response is given
     }
 
-    // NEW REFACTORED FUNCTION
+    // UPDATED FUNCTION to check the new 'is_admin' flag
     function updateUIForUserProfile(profile) {
         currentUserProfile = profile;
         currentUserEmail = profile.user_email;
@@ -98,27 +101,46 @@ document.addEventListener('DOMContentLoaded', () => {
         profileEmail.textContent = currentUserEmail;
         showChat();
         
-        if (profile.user_hierarchy_level === ADMIN_LEVEL) {
+        if (profile.is_admin) { // Check the boolean flag now
             adminControlsArea.classList.remove('hidden');
         } else {
             adminControlsArea.classList.add('hidden');
         }
     }
 
+    // UPDATED FUNCTION to populate department checkboxes
     async function loadAdminPanelData() {
         try {
             const response = await fetch('/admin/config_tags', getFetchOptions());
             if (!response.ok) return;
             const data = await response.json();
-            knownDepartmentsDatalist.innerHTML = '';
+            
+            // --- NEW: Populate department checkboxes ---
+            targetDepartmentsGroup.innerHTML = ''; // Clear previous
             if (data.known_department_tags) {
                 data.known_department_tags.forEach(tag => {
-                    const option = document.createElement('option');
-                    option.value = tag;
-                    knownDepartmentsDatalist.appendChild(option);
+                    const div = document.createElement('div');
+                    div.className = 'checkbox-item';
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.id = `dept-check-${tag}`;
+                    input.value = tag;
+                    input.name = 'departments';
+                    const label = document.createElement('label');
+                    label.htmlFor = `dept-check-${tag}`;
+                    label.textContent = tag;
+                    div.appendChild(input);
+                    div.appendChild(label);
+                    targetDepartmentsGroup.appendChild(div);
                 });
+            } else {
+                targetDepartmentsGroup.innerHTML = '<p>No known departments found.</p>';
             }
-        } catch (error) { console.error("Could not load admin config tags:", error); }
+
+        } catch (error) { 
+            console.error("Could not load admin config tags:", error); 
+            targetDepartmentsGroup.innerHTML = '<p>Error loading departments.</p>';
+        }
     }
     
     function hideTicketModal() {
@@ -150,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     chatInput.addEventListener('input', () => {
         chatInput.style.height = 'auto';
-        chatInput.style.height = `${Math.min(chatInput.scrollHeight, 150)}px`;
+        chatInput.style.height = `${Math.min(chatInput.scrollHeight, 450)}px`;
     });
 
     // --- Event Listeners ---
@@ -164,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Login failed');
             
-            // UPDATED to use refactored function
             if (data.user_profile) {
                 updateUIForUserProfile(data.user_profile);
                 emailInput.value = '';
@@ -188,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Logout failed, but clearing client-side state anyway:", error);
         } finally {
             localStorage.removeItem('knowledgeAssistantProfile');
+            chatSection.classList.remove('chat-active');
             currentUserEmail = null; currentUserProfile = null;
             currentQuestion = null; currentAnswer = null; chatHistory = [];
             contextualRolesObject = {};
@@ -198,6 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const handleSend = async () => {
+        chatSection.classList.add('chat-active');
         const prompt = chatInput.value.trim();
         if (!prompt || !currentUserEmail) return;
         appendMessage('user', prompt);
@@ -313,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function openAdminModal() { adminModal.showModal(); loadAdminPanelData(); fetchAndDisplayTickets(); }
     function closeAdminModal() { 
         adminModal.close(); 
-        clearAdminMessages(); // Clear messages on close
+        clearAdminMessages();
     }
     openAdminPanelButton.addEventListener('click', openAdminModal);
     adminModalCloseBtn.addEventListener('click', closeAdminModal);
@@ -338,22 +361,43 @@ document.addEventListener('DOMContentLoaded', () => {
         roleContextTagInput.value = ''; roleNameTagInput.value = ''; roleContextTagInput.focus();
     });
 
+    // --- UPDATED: 'submit' event listener for the new admin form ---
     adminPermissionsForm.addEventListener('submit', async (event) => {
-        // UPDATED to clear stale messages
         clearAdminMessages();
         event.preventDefault();
         adminPermissionsMessage.textContent = ''; adminPermissionsMessage.className = 'error-message';
         const targetEmail = targetUserEmailInput.value.trim();
         if (!targetEmail) { adminPermissionsMessage.textContent = 'Target User Email is required.'; return; }
+        
+        // --- UPDATED: Logic to gather data from new form controls ---
         const permissions = {};
-        const hierarchyLevel = targetHierarchyLevelInput.value.trim();
-        if (hierarchyLevel !== '') permissions.user_hierarchy_level = parseInt(hierarchyLevel, 10);
-        const departmentsStr = targetDepartmentsInput.value.trim();
-        if (departmentsStr !== '') permissions.departments = departmentsStr.split(',').map(d => d.trim().toUpperCase()).filter(Boolean);
+        const hierarchyLevel = targetHierarchyLevelInput.value;
+        if (hierarchyLevel !== '') {
+            permissions.user_hierarchy_level = parseInt(hierarchyLevel, 10);
+        }
+        
+        // Always include the is_admin flag
+        permissions.is_admin = targetIsAdminInput.checked;
+    
+        // Gather from checkboxes. We'll always send the array, even if it's empty,
+        // to allow admins to remove all departments from a user.
+        const selectedDepartmentNodes = targetDepartmentsGroup.querySelectorAll('input[name="departments"]:checked');
+        permissions.departments = Array.from(selectedDepartmentNodes).map(node => node.value);
+        
         const projectsStr = targetProjectsInput.value.trim();
-        if (projectsStr !== '') permissions.projects_membership = projectsStr.split(',').map(p => p.trim().toUpperCase()).filter(Boolean);
-        if (Object.keys(contextualRolesObject).length > 0) { permissions.contextual_roles = contextualRolesObject; }
+        if (projectsStr !== '') {
+            permissions.projects_membership = projectsStr.split(',').map(p => p.trim().toUpperCase()).filter(Boolean);
+        } else {
+            permissions.projects_membership = []; // Send empty array to clear projects
+        }
+    
+        if (Object.keys(contextualRolesObject).length > 0) {
+            permissions.contextual_roles = contextualRolesObject;
+        }
+        // --- End of updated data gathering block ---
+
         if (Object.keys(permissions).length === 0) { adminPermissionsMessage.textContent = 'No changes detected. Please fill in at least one field to update.'; return; }
+        
         try {
             const response = await fetch('/admin/user_permissions', getFetchOptions('POST', { target_email: targetEmail, permissions }));
             const data = await response.json();
@@ -366,7 +410,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     viewPermissionsButton.addEventListener('click', async () => {
-        // UPDATED to clear stale messages
         clearAdminMessages();
         adminViewPermissionsMessage.textContent = ''; adminViewPermissionsMessage.className = 'error-message';
         userPermissionsDisplayDiv.classList.add('hidden');
@@ -384,7 +427,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     removeUserButton.addEventListener('click', async () => {
-        // UPDATED to clear stale messages
         clearAdminMessages();
         adminRemoveUserMessage.textContent = ''; adminRemoveUserMessage.className = 'error-message';
         const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
@@ -408,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
         if (ticketQuestionTextarea.value) { ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true })); }
         else { ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>'; }
-    }, 50);
+    }, 30);
 });
 
     cancelTicketButton.addEventListener('click', () => { hideTicketModal(); });
@@ -439,12 +481,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 500);
     });
     
+    // --- UPDATED: submitTicketButton listener for new API contract ---
     submitTicketButton.addEventListener('click', async () => {
         const question_text = ticketQuestionTextarea.value.trim(); const selected_team = ticketTeamSelect.value;
         ticketSubmissionMessage.textContent = ''; ticketSubmissionMessage.className = 'error-message';
         if (!question_text || !selected_team) { ticketSubmissionMessage.textContent = 'Question and team selection are required.'; return; }
         try {
-            const body = { question_text: question_text, chat_history_json: JSON.stringify(chatHistory.slice(-5)), selected_team: selected_team };
+            // UPDATED: 'chat_history' instead of 'chat_history_json', no stringify
+            const body = { question_text: question_text, chat_history: chatHistory.slice(-5), selected_team: selected_team };
             const response = await fetch('/tickets/create', getFetchOptions('POST', body));
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Could not create ticket.');
@@ -461,7 +505,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) { throw new Error("No valid session."); }
             const data = await response.json();
             
-            // UPDATED to use refactored function
             if (data.user_profile) {
                 console.log("Session validated. Resuming for:", data.user_profile.user_email);
                 updateUIForUserProfile(data.user_profile);

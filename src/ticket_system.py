@@ -52,25 +52,18 @@ class TeamSuggester:
             question_embedding = self.embedding_model.embed_query(question)
 
             # 2. Calculate the similarity between the question and all team descriptions.
-            # The result is a list of scores, e.g., [[0.1, 0.8, 0.3, 0.2]]
-            # Convert lists to numpy arrays for calculation
             question_embedding_np = np.array(question_embedding)
             team_embeddings_np = np.array(self.team_embeddings)
 
             # For normalized embeddings, cosine similarity is just the dot product.
             similarities = np.dot(team_embeddings_np, question_embedding_np)
 
-            # 3. Find the highest score and the corresponding team.
-            # We set a minimum threshold to avoid nonsensical suggestions for vague questions.
+            # 3. Find the best match using NumPy's optimized functions.
+            best_team_index = np.argmax(similarities)
+            max_score = similarities[best_team_index]
+            
+            # 4. Check if the best match meets our confidence threshold.
             min_confidence_threshold = 0.3
-            max_score = -1
-            best_team_index = -1
-
-            for i, score in enumerate(similarities):
-                if score > max_score:
-                    max_score = score
-                    best_team_index = i
-
             if max_score >= min_confidence_threshold:
                 suggested_team = self.team_names[best_team_index]
                 logger.info(f"Team suggestion for question '{question[:30]}...': '{suggested_team}' with score {max_score:.2f}")

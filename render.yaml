@@ -9,17 +9,3 @@ services:
     healthCheck:
       path: /
       initialDelaySeconds: 90
-    # The 'disks:' section is GONE.
-
-  # Cron job service to synchronize documents
-  - name: document-synchronizer
-    type: cron
-    plan: free
-    schedule: "0 0 * * *"
-    command: 'curl -fs -X POST -H "X-Sync-Token: ${SYNC_SECRET_TOKEN}" https://${RENDER_EXTERNAL_URL}/admin/sync_documents'
-    envVars:
-      - key: SYNC_SECRET_TOKEN
-        fromService:
-          type: web
-          name: knowledge-assistant-app
-          envVarKey: SYNC_SECRET_TOKEN

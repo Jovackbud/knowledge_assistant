@@ -19,16 +19,21 @@ from .services import shared_services
 from .config import (
     UserProfile,
     PINECONE_INDEX_NAME, EMBEDDING_MODEL, RERANKER_MODEL, LLM_GENERATION_MODEL, USE_RERANKER,
-    DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG, RERANKER_SCORE_THRESHOLD
+    DEFAULT_DEPARTMENT_TAG, DEFAULT_PROJECT_TAG, DEFAULT_ROLE_TAG, RERANKER_SCORE_THRESHOLD,
+    LLM_REPHRASE_MODEL
 )
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    def __init__(self, vector_store: PineconeVectorStore, llm: ChatGoogleGenerativeAI):
+    def __init__(self, vector_store: PineconeVectorStore):
         self.vector_store = vector_store
-        self.llm = llm
+        self.llm_generation = ChatGoogleGenerativeAI(model=LLM_GENERATION_MODEL)
+        logger.info(f"RAG: Generation LLM '{LLM_GENERATION_MODEL}' initialized.")
+        # Smaller, faster LLM for rephrasing questions
+        self.llm_rephrase = ChatGoogleGenerativeAI(model=LLM_REPHRASE_MODEL)
+        logger.info(f"RAG: Rephrase LLM '{LLM_REPHRASE_MODEL}' initialized.")
         self.reranker = None
         if USE_RERANKER:
             try:
@@ -57,9 +62,17 @@ class RAGService:
             self.prompt_template = ChatPromptTemplate.from_messages([
                 ("system", system_prompt_content),
                 MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{question}")
+                ("human", "Original Question: {question}\nRephrased Question: {retrieval_question}")
             ])
-            logger.info("RAG: All prompts loaded successfully.")
+            # 1. A chain specifically for rephrasing the question
+            self.rephrase_chain = (
+                self.rephrase_prompt
+                | self.llm_rephrase
+                | StrOutputParser()
+                ).with_config(run_name="rephrase_question_step")
+
+
+            logger.info("RAG: All prompts and rephrase chain loaded successfully.")
         except FileNotFoundError as e:
             logger.error(f"FATAL: Prompt file not found: {e}. Please ensure it exists.")
             raise
@@ -80,7 +93,7 @@ class RAGService:
         vector_store = cls._init_vector_store(PINECONE_INDEX_NAME)
         
         # Now we call the new, simpler constructor with the correct arguments.
-        return cls(vector_store=vector_store, llm=llm)
+        return cls(vector_store=vector_store)
 
     @staticmethod
     def _init_vector_store(index_name: str) -> PineconeVectorStore:
@@ -133,48 +146,50 @@ class RAGService:
     def get_rag_chain(self, user_profile: Optional[UserProfile], chat_history: List[Dict[str, str]]):
         """
         Constructs a complete, history-aware, and permission-filtered RAG chain.
-        This version cleanly separates the question rephrasing logic.
+        This version passes both the original and rephrased question to the final LLM.
         """
-        # 1. A chain specifically for rephrasing the question
-        rephrase_chain = (
-            self.rephrase_prompt
-            | self.llm
-            | StrOutputParser()
-        ).with_config(run_name="rephrase_question_step")
 
-        # 2. The main RAG chain that answers the question
         base_retriever = self.vector_store.as_retriever(
-            search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 10}
+            search_kwargs={'filter': self._build_filter_expression(user_profile), 'k': 7}
         )
 
-        # This is the main processing chain
-        answer_chain = (
+        # 1. Define the input preparation chain. This creates the 'retrieval_question'.
+        prepare_inputs_chain = RunnableLambda(
+            lambda x: {
+                "question": x["question"],
+                "chat_history": x["chat_history"],
+                # If no history, retrieval_question is the same as the original.
+                # If there is history, invoke the rephrase_chain.
+                "retrieval_question": x["question"] if not x.get("chat_history") else self.rephrase_chain.invoke(x)
+            },
+            name="prepare_inputs_step"
+        )
+
+        # 2. Define the main RAG processing chain.
+        rag_chain = (
             RunnablePassthrough.assign(
                 docs=RunnableLambda(
                     lambda x: self.rerank_and_filter_documents(
-                        docs=base_retriever.invoke(x["question"]), # Use the rephrased question
-                        question=x["question"]
+                        # Use the rephrased question for retrieval
+                        docs=base_retriever.invoke(x["retrieval_question"]),
+                        question=x["retrieval_question"]
                     )
                 ).with_config(run_name="retriever_and_reranker_step")
             )
             .assign(context=lambda x: self.format_docs(x["docs"]))
-            | self.prompt_template
-            | self.llm.with_config(run_name="final_answer_llm")
         )
 
-        # 3. The final conversational chain that decides whether to rephrase or not
-        def route(info):
-            if not info.get("chat_history"):
-                # If no chat history, just use the original question
-                return RunnablePassthrough.assign(question=lambda x: x['question']) | answer_chain
-            else:
-                # If there is chat history, rephrase the question first
-                return RunnablePassthrough.assign(question=rephrase_chain) | answer_chain
+        # 3. Define the final chain that assembles the prompt and calls the LLM.
+        final_chain = (
+            self.prompt_template
+            | self.llm_generation.with_config(run_name="final_answer_llm")
+            | StrOutputParser()
+        )
+
+         # 4. Combine them into the complete, final chain.
+        complete_chain = prepare_inputs_chain | rag_chain | final_chain
         
-        # This uses the router function to create the final, complete chain
-        conversational_rag_chain = RunnableLambda(route)
-        
-        return conversational_rag_chain
+        return complete_chain
 
     
     def _build_filter_expression(self, profile: Dict[str, Any]) -> Dict:

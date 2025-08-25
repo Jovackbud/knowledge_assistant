@@ -31,6 +31,7 @@ emails.txt
 sample_docs/
 scripts/bulk_add_users.py
 test_reranker.py
+AI4AI_Staff.xlsx
 *.md
 
 # Render platform configuration

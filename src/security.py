@@ -1,9 +1,8 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from typing import cast
 
 from .database_utils import get_user_profile
 from .config import UserProfile
@@ -65,7 +64,7 @@ def get_current_active_user(token: str) -> UserProfile:
         if email_from_token is None:
             raise AuthException(detail="Invalid token: Subject (email) missing.")
         
-        email: str = email_from_token
+        email: str = email_from_token.lower()
 
     except JWTError:
         raise AuthException(detail="Invalid token: Could not validate credentials.")
