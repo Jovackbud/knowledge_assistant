@@ -247,7 +247,9 @@
             <div id="user-profile-controls" class="header-user-controls hidden">
                 <p><span id="profile-email"></span></p>
                 <button id="openTicketModalButton">Create Support Ticket</button>
-                <div id="admin-controls-area" class="hidden"><button id="openAdminPanelButton">Admin Panel</button></div>
+                <div id="admin-controls-area" class="hidden">
+                    <button id="openAdminDashboardButton" style="background-color: var(--danger-color); color: white;">Admin Dashboard</button>
+                </div>
                 <button id="logoutButton" class="btn-secondary">Logout</button>
             </div>
         </header>
@@ -286,107 +288,150 @@
             </div>
         </section>
         
-        <!-- Ticket Modal -->
-        <dialog id="ticket-modal">
-            <h2>New Support Ticket</h2>
-            <label for="ticket-question">Your Question/Issue:</label>
-            <textarea id="ticket-question" rows="4"></textarea>
-            <label for="ticket-team">Select a Team:</label>
-            <select id="ticket-team"></select> 
-            <p id="team-suggestion" style="font-style: italic; color: #555; margin-top: -0.5rem; margin-bottom: 1rem;"></p>
-            <button id="submitTicketButton">Submit Ticket</button>
-            <button type="button" id="cancelTicketButton" class="btn-secondary">Cancel</button>
-            <p id="ticket-submission-message" style="margin-top: 1rem;"></p>
-        </dialog>
-    </div>
-
-    <!-- Admin Modal -->
-    <dialog id="admin-modal">
-        <div class="admin-modal-container">
-            <div class="admin-modal-header">
-                <h2>Admin Panel</h2>
-                <button id="admin-modal-close-btn" class="admin-modal-close-btn" aria-label="Close Admin Panel">×</button>
+        </section>
+        <section id="admin-dashboard-section" class="hidden" style="flex-grow: 1; display:flex; flex-direction: column; background-color: #121212; color: #e0e0e0; padding: 2rem; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
+                <h2 style="color: #ffffff; margin: 0;">Sovereign Command Center</h2>
+                <button id="closeAdminDashboardButton" class="btn-secondary">← Back to Chat</button>
             </div>
-            <div class="admin-modal-body">
-                <nav class="admin-modal-nav">
-                    <button class="admin-nav-button active" data-panel="view-tickets-panel">View Tickets</button>
-                    <button class="admin-nav-button" data-panel="view-permissions-panel">View Permissions</button>
-                    <button class="admin-nav-button" data-panel="manage-permissions-panel">Manage Permissions</button>
-                    <button class="admin-nav-button" data-panel="remove-user-panel">Remove User</button>
+            
+            <div style="display: flex; gap: 2rem; flex-grow: 1; overflow: hidden;">
+                <!-- Sidebar -->
+                <nav style="flex: 0 0 200px; padding-right: 1rem; border-right: 1px solid #333;">
+                    <button class="admin-nav-button active" data-panel="docs-panel" style="width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; background: var(--primary-color); border: none; color: white; border-radius: 4px;">Documents</button>
+                    <button class="admin-nav-button" data-panel="view-tickets-panel" style="width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; background: transparent; border: none; color: #e0e0e0; border-radius: 4px;">Support Tickets</button>
+                    <button class="admin-nav-button" data-panel="view-permissions-panel" style="width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; background: transparent; border: none; color: #e0e0e0; border-radius: 4px;">View Permissions</button>
+                    <button class="admin-nav-button" data-panel="manage-permissions-panel" style="width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; background: transparent; border: none; color: #e0e0e0; border-radius: 4px;">Manage Access</button>
+                    <button class="admin-nav-button" data-panel="remove-user-panel" style="width: 100%; text-align: left; padding: 10px; margin-bottom: 5px; background: transparent; border: none; color: #e0e0e0; border-radius: 4px;">Remove User</button>
                 </nav>
-                <main class="admin-modal-content">
-                    <div id="view-tickets-panel" class="admin-panel active">
-                        <fieldset><legend>Recent Support Tickets</legend>
-                            <p id="tickets-loading-message">Loading tickets...</p>
-                            <div id="tickets-table-container" class="hidden">
-                                <table class="tickets-table">
-                                    <thead><tr><th>Timestamp</th><th>User</th><th>Question</th><th>Selected Team</th><th>Status</th></tr></thead>
-                                    <tbody id="tickets-table-body"></tbody>
+
+                <!-- Main Content Area -->
+                <main style="flex-grow: 1; overflow-y: auto; padding-right: 1rem;" id="admin-main-content">
+                    
+                    <!-- Document Admin Panel -->
+                    <div id="docs-panel" class="admin-panel active" style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; height: 100%;">
+                        <div style="background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column;">
+                            <h3 style="margin-top: 0; color: #ffffff;">Secure Upload</h3>
+                            <p style="font-size: 0.85em; color: #aaa;">Enforce privacy tags immediately upon ingestion.</p>
+                            
+                            <label for="upload-department-tag" style="color: #ccc; font-size: 0.9em; margin-top: 10px;">Department:</label>
+                            <select id="upload-department-tag" style="background-color: #2c2c2c; color: white; border-color: #444; margin-bottom: 10px;">
+                                <!-- Populated dynamically -->
+                            </select>
+
+                            <label for="upload-hierarchy-level" style="color: #ccc; font-size: 0.9em;">Hierarchy Level Minimum:</label>
+                            <select id="upload-hierarchy-level" style="background-color: #2c2c2c; color: white; border-color: #444; margin-bottom: 15px;">
+                                <option value="0">Staff / Member (0)</option>
+                                <option value="1">Manager (1)</option>
+                                <option value="2">Executive / Director (2)</option>
+                                <option value="3">Board / C-Level (3)</option>
+                            </select>
+
+                            <div id="document-dropzone" style="flex-grow: 1; border: 2px dashed #444; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 0.2s; min-height: 120px; text-align: center; color: #888; font-size: 0.9em;">
+                                Drag & Drop or Click to Upload
+                                <input type="file" id="document-file-input" style="display: none;" accept=".pdf,.txt,.md">
+                            </div>
+                            <div id="upload-status-message" style="margin-top: 1rem; font-weight: bold; font-size: 0.9em;"></div>
+                        </div>
+
+                        <div style="background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; overflow: hidden;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="margin-top: 0; color: #ffffff;">Indexed Documents</h3>
+                                <button id="refreshDocsButton" style="padding: 4px 8px; font-size: 0.8em; background-color: #333; color: white; border: none; cursor: pointer;">Refresh</button>
+                            </div>
+                            <div style="overflow-y: auto; flex-grow: 1; margin-top: 1rem; border-top: 1px solid #333; padding-top: 1rem;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid #444;">
+                                            <th style="text-align: left; padding: 8px;">Filename</th>
+                                            <th style="text-align: left; padding: 8px;">Size</th>
+                                            <th style="text-align: right; padding: 8px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-docs-table-body">
+                                        <tr><td colspan="3" style="text-align: center; padding: 1rem; color: #888;">Loading...</td></tr>
+                                    </tbody>
                                 </table>
                             </div>
-                        </fieldset>
-                    </div>
-                    <div id="view-permissions-panel" class="admin-panel"><fieldset><legend>View User Permissions</legend><label for="view-target-user-email">User Email to View:</label><input type="email" id="view-target-user-email"><button type="button" id="viewPermissionsButton">View Permissions</button><div id="admin-view-permissions-message" style="margin-top: 10px;"></div><div id="user-permissions-display" class="hidden" style="margin-top: 10px;"><h4>Permissions for <span id="display-user-email"></span>:</h4><pre id="display-user-permissions-json"></pre></div></fieldset></div>
-                    
-                    <!-- ENTIRELY NEW "MANAGE PERMISSIONS" PANEL -->
-                    <div id="manage-permissions-panel" class="admin-panel">
-                        <fieldset>
-                            <legend>Manage User Permissions</legend>
-                            <form id="admin-permissions-form">
-                                <label for="target-user-email">Target User Email:</label>
-                                <input type="email" id="target-user-email" required>
-                                <small style="display: block; margin-top: -0.5rem; margin-bottom: 1rem;">(Creates a new user or updates an existing one.)</small>
-                                
-                                <div class="form-grid">
-                                    <div>
-                                        <label for="target-hierarchy-level">Hierarchy Level:</label>
-                                        <select id="target-hierarchy-level" style="margin-bottom: 1rem;">
-                                            <option value="">(No Change)</option>
-                                            <option value="0">Staff / Member</option>
-                                            <option value="1">Manager</option>
-                                            <option value="2">Executive / Director</option>
-                                            <option value="3">Board / C-Level</option>
-                                        </select>
-                                    </div>
-                                    <div class="checkbox-item" style="align-self: center; margin-bottom: 1rem;">
-                                        <input type="checkbox" id="target-is-admin">
-                                        <label for="target-is-admin">Set as System Admin</label>
-                                    </div>
-                                </div>
-
-                                <div class="form-grid">
-                                    <div>
-                                        <label for="target-departments-group">Departments:</label>
-                                        <div id="target-departments-group" class="checkbox-group">
-                                            <!-- Department checkboxes will be populated here by JS -->
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label for="target-projects">Projects (comma-separated):</label>
-                                        <input type="text" id="target-projects" placeholder="e.g., ProjectAlpha, ProjectBeta">
-                                    </div>
-                                </div>
-                                <hr style="margin: 1.5rem 0;">
-                                <label>Contextual Roles:</label>
-                                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.5rem;">
-                                    <input type="text" id="role-context-tag" placeholder="Context (e.g., PROJECT_ALPHA)" style="margin-bottom: 0;">
-                                    <input type="text" id="role-name-tag" placeholder="Role Name (e.g., LEAD)" style="margin-bottom: 0;">
-                                    <button type="button" id="addRoleButton" style="flex-shrink: 0;">Add Role</button>
-                                </div>
-                                <label>Current Roles to Add/Update:</label>
-                                <pre id="contextual-roles-preview">{}</pre>
-                                <small>(Building roles here will overwrite all existing contextual roles for this user upon submission.)</small>
-                                <button type="submit" style="margin-top: 1rem;">Update User Permissions</button>
-                            </form>
-                            <div id="admin-permissions-message" style="margin-top: 10px;"></div>
-                        </fieldset>
+                        </div>
                     </div>
 
-                    <div id="remove-user-panel" class="admin-panel"><fieldset><legend>Remove User</legend><label for="remove-target-user-email">User Email to Remove:</label><input type="email" id="remove-target-user-email"><button type="button" id="removeUserButton" class="btn-danger">Remove User</button><div id="admin-remove-user-message" style="margin-top: 10px;"></div></fieldset></div>
+                    <!-- Tickets Panel -->
+                    <div id="view-tickets-panel" class="admin-panel hidden" style="background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333;">
+                        <h3 style="margin-top: 0; color: #ffffff;">Recent Support Tickets</h3>
+                        <p id="tickets-loading-message" style="color: #aaa;">Loading tickets...</p>
+                        <div id="tickets-table-container" class="hidden">
+                            <table class="tickets-table" style="color: #ccc; border-color: #444;">
+                                <thead style="background-color: #2c2c2c;"><tr><th>Timestamp</th><th>User</th><th>Question</th><th>Team</th><th>Status</th></tr></thead>
+                                <tbody id="tickets-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- View Permissions -->
+                    <div id="view-permissions-panel" class="admin-panel hidden" style="background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333;">
+                        <h3 style="margin-top: 0; color: #ffffff;">View User Permissions</h3>
+                        <label for="view-target-user-email" style="color: #ccc;">User Email:</label>
+                        <input type="email" id="view-target-user-email" style="background-color: #2c2c2c; color: white; border-color: #444;">
+                        <button type="button" id="viewPermissionsButton" style="margin-top: 10px;">View Permissions</button>
+                        <div id="admin-view-permissions-message" style="margin-top: 10px;"></div>
+                        <div id="user-permissions-display" class="hidden" style="margin-top: 10px;">
+                            <h4 style="color: white;">Permissions for <span id="display-user-email"></span>:</h4>
+                            <pre id="display-user-permissions-json" style="background-color: #2c2c2c; color: #4af626;"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Manage Permissions -->
+                    <div id="manage-permissions-panel" class="admin-panel hidden" style="background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333;">
+                        <h3 style="margin-top: 0; color: #ffffff;">Manage User Access</h3>
+                        <form id="admin-permissions-form">
+                            <label for="target-user-email" style="color: #ccc;">Target User Email:</label>
+                            <input type="email" id="target-user-email" required style="background-color: #2c2c2c; color: white; border-color: #444;">
+                            
+                            <div class="form-grid">
+                                <div>
+                                    <label for="target-hierarchy-level" style="color: #ccc;">Hierarchy Level:</label>
+                                    <select id="target-hierarchy-level" style="margin-bottom: 1rem; background-color: #2c2c2c; color: white; border-color: #444;">
+                                        <option value="">(No Change)</option>
+                                        <option value="0">Staff / Member</option>
+                                        <option value="1">Manager</option>
+                                        <option value="2">Executive / Director</option>
+                                        <option value="3">Board / C-Level</option>
+                                    </select>
+                                </div>
+                                <div class="checkbox-item" style="align-self: center; margin-bottom: 1rem;">
+                                    <input type="checkbox" id="target-is-admin">
+                                    <label for="target-is-admin" style="color: #ccc;">Set as System Admin</label>
+                                </div>
+                            </div>
+                            <div class="form-grid">
+                                <div>
+                                    <label for="target-departments-group" style="color: #ccc;">Departments:</label>
+                                    <div id="target-departments-group" class="checkbox-group" style="background-color: #2c2c2c; border-color: #444;">
+                                        <!-- populated dynamically -->
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="target-projects" style="color: #ccc;">Projects (comma-separated):</label>
+                                    <input type="text" id="target-projects" style="background-color: #2c2c2c; color: white; border-color: #444;">
+                                </div>
+                            </div>
+                            <button type="submit" style="margin-top: 1rem;">Update Permissions</button>
+                        </form>
+                        <div id="admin-permissions-message" style="margin-top: 10px;"></div>
+                    </div>
+
+                    <!-- Remove User -->
+                    <div id="remove-user-panel" class="admin-panel hidden" style="background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333;">
+                        <h3 style="margin-top: 0; color: #ff4444;">Remove User</h3>
+                        <label for="remove-target-user-email" style="color: #ccc;">User Email to Remove:</label>
+                        <input type="email" id="remove-target-user-email" style="background-color: #2c2c2c; color: white; border-color: #444;">
+                        <button type="button" id="removeUserButton" class="btn-danger" style="margin-top: 10px;">Eradicate User</button>
+                        <div id="admin-remove-user-message" style="margin-top: 10px;"></div>
+                    </div>
                 </main>
             </div>
-        </div>
-    </dialog>
+        </section></dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" integrity="sha512-rCQgmUulW6f6QegOvTntKKb5IAoxTpGVCdWqYjkXEpzAns6XUFs8NKVqWe+KQpctp/EoRSFSuykVputqknLYMg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="/static/app.js" defer></script>

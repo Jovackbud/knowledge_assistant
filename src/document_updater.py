@@ -327,3 +327,48 @@ def synchronize_documents():
     except Exception as e:
         logger.error(f"❌ Document synchronization failed: {e}", exc_info=True)
         raise
+
+def list_admin_documents() -> List[Dict[str, Any]]:
+    """Returns a list of documents with metadata for the admin panel."""
+    if not S3_BUCKET_NAME:
+        return []
+    docs = []
+    try:
+        paginator = s3_client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=S3_BUCKET_NAME):
+            for obj in page.get('Contents', []):
+                key = obj['Key']
+                if key.endswith('/'): continue
+                if os.path.splitext(key)[1].lower() in ALLOWED_EXTENSIONS:
+                    docs.append({
+                        "filename": key,
+                        "hash": obj['ETag'].strip('"'),
+                        "size": obj['Size'],
+                        "last_modified": obj['LastModified'].isoformat() if hasattr(obj['LastModified'], 'isoformat') else str(obj['LastModified'])
+                    })
+    except ClientError as e:
+        logger.error(f"Failed to list S3 bucket for admin: {e}")
+    return docs
+
+def upload_admin_document(file_name: str, file_content: bytes) -> bool:
+    """Uploads a document to S3 directly."""
+    if not S3_BUCKET_NAME:
+        return False
+    try:
+        s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=file_name, Body=file_content)
+        return True
+    except Exception as e:
+        logger.error(f"Error uploading {file_name}: {e}")
+        return False
+
+def delete_admin_document(file_name: str) -> bool:
+    """Deletes a document from S3."""
+    if not S3_BUCKET_NAME:
+        return False
+    try:
+        s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=file_name)
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting {file_name}: {e}")
+        return False
+

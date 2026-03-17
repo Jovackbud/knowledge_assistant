@@ -45,9 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeTargetUserEmailInput = document.getElementById('remove-target-user-email');
     const removeUserButton = document.getElementById('removeUserButton');
     const adminRemoveUserMessage = document.getElementById('admin-remove-user-message');
-    const openAdminPanelButton = document.getElementById('openAdminPanelButton');
-    const adminModal = document.getElementById('admin-modal');
-    const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
+    const openAdminDashboardButton = document.getElementById('openAdminDashboardButton');
+    const closeAdminDashboardButton = document.getElementById('closeAdminDashboardButton');
+    const adminDashboardSection = document.getElementById('admin-dashboard-section');
     const adminNavButtons = document.querySelectorAll('.admin-nav-button');
     const adminPanels = document.querySelectorAll('.admin-panel');
     const ticketsLoadingMessage = document.getElementById('tickets-loading-message');
@@ -56,9 +56,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- NEW SELECTORS for simplified admin panel ---
     const targetIsAdminInput = document.getElementById('target-is-admin');
     const targetDepartmentsGroup = document.getElementById('target-departments-group');
-
-
-    // --- State Variables ---
+    
+    // --- NEW SELECTORS for Document Admin ---
+    const refreshDocsButton = document.getElementById('refreshDocsButton');
+    const adminDocsTableBody = document.getElementById('admin-docs-table-body');
+    const documentDropzone = document.getElementById('document-dropzone');
+    const documentFileInput = document.getElementById('document-file-input');
+    const uploadStatusMessage = document.getElementById('upload-status-message');
+    const uploadDepartmentTag = document.getElementById('upload-department-tag');
+    const uploadHierarchyLevel = document.getElementById('upload-hierarchy-level');    // --- State Variables ---
     let currentUserProfile = null;
     let currentUserEmail = null;
     let currentQuestion = null;
@@ -82,14 +88,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Visibility & UI Functions ---
     function showLogin() {
-        [userProfileControls, chatSection, postChatActions, adminControlsArea, userPermissionsDisplayDiv].forEach(el => el.classList.add('hidden'));
+        [userProfileControls, chatSection, postChatActions, adminControlsArea, userPermissionsDisplayDiv, adminDashboardSection].forEach(el => {
+            if (el) el.classList.add('hidden');
+        });
         loginSection.classList.remove('hidden');
     }
 
     function showChat() {
         loginSection.classList.add('hidden');
+        if (adminDashboardSection) adminDashboardSection.classList.add('hidden');
         [userProfileControls, chatSection].forEach(el => el.classList.remove('hidden'));
         postChatActions.classList.add('hidden'); // Keep actions hidden until a chat response is given
+    }
+
+    function showAdminDashboard() {
+        loginSection.classList.add('hidden');
+        chatSection.classList.add('hidden');
+        postChatActions.classList.add('hidden');
+        adminDashboardSection.classList.remove('hidden');
+        loadAdminPanelData();
+        fetchAdminDocuments();
     }
 
     // UPDATED FUNCTION to check the new 'is_admin' flag
@@ -108,17 +126,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // UPDATED FUNCTION to populate department checkboxes
+    // UPDATED FUNCTION to populate department checkboxes and upload selects
     async function loadAdminPanelData() {
         try {
             const response = await fetch('/admin/config_tags', getFetchOptions());
             if (!response.ok) return;
             const data = await response.json();
             
-            // --- NEW: Populate department checkboxes ---
-            targetDepartmentsGroup.innerHTML = ''; // Clear previous
+            targetDepartmentsGroup.innerHTML = '';
+            if (uploadDepartmentTag) uploadDepartmentTag.innerHTML = '';
+
             if (data.known_department_tags) {
                 data.known_department_tags.forEach(tag => {
+                    // Checkboxes for Permissions
                     const div = document.createElement('div');
                     div.className = 'checkbox-item';
                     const input = document.createElement('input');
@@ -132,9 +152,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     div.appendChild(input);
                     div.appendChild(label);
                     targetDepartmentsGroup.appendChild(div);
+
+                    // Select Option for Document Upload
+                    if (uploadDepartmentTag) {
+                        const option = document.createElement('option');
+                        option.value = tag;
+                        option.textContent = tag;
+                        uploadDepartmentTag.appendChild(option);
+                    }
                 });
             } else {
                 targetDepartmentsGroup.innerHTML = '<p>No known departments found.</p>';
+                if (uploadDepartmentTag) uploadDepartmentTag.innerHTML = '<option value="GENERAL">General</option>';
             }
 
         } catch (error) { 
@@ -333,22 +362,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function openAdminModal() { adminModal.showModal(); loadAdminPanelData(); fetchAndDisplayTickets(); }
-    function closeAdminModal() { 
-        adminModal.close(); 
-        clearAdminMessages();
+    if (openAdminDashboardButton) {
+        openAdminDashboardButton.addEventListener('click', showAdminDashboard);
     }
-    openAdminPanelButton.addEventListener('click', openAdminModal);
-    adminModalCloseBtn.addEventListener('click', closeAdminModal);
-    adminModal.addEventListener('close', clearAdminMessages);
+    if (closeAdminDashboardButton) {
+        closeAdminDashboardButton.addEventListener('click', () => {
+            clearAdminMessages();
+            showChat();
+        });
+    }
 
+    function updateActivePanel(targetPanelId) {
+        adminNavButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.panel === targetPanelId));
+        adminPanels.forEach(panel => {
+            if (panel.id === targetPanelId) {
+                panel.classList.remove('hidden');
+                panel.classList.add('active');
+            } else {
+                panel.classList.add('hidden');
+                panel.classList.remove('active');
+            }
+        });
+        if (targetPanelId === 'view-tickets-panel') { fetchAndDisplayTickets(); }
+    }
 
     adminNavButtons.forEach(button => {
         button.addEventListener('click', () => {
-            const targetPanelId = button.dataset.panel;
-            adminNavButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active');
-            adminPanels.forEach(panel => { panel.classList.toggle('active', panel.id === targetPanelId); });
-            if (targetPanelId === 'view-tickets-panel') { fetchAndDisplayTickets(); }
+            updateActivePanel(button.dataset.panel);
         });
     });
 
@@ -441,6 +481,112 @@ document.addEventListener('DOMContentLoaded', () => {
             removeTargetUserEmailInput.value = '';
         } catch (error) { adminRemoveUserMessage.textContent = `Error: ${error.message}`; }
     });
+
+    // --- Document Admin Logic ---
+    if (refreshDocsButton) {
+        refreshDocsButton.addEventListener('click', fetchAdminDocuments);
+    }
+
+    async function fetchAdminDocuments() {
+        adminDocsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #888;">Loading documents...</td></tr>';
+        try {
+            const response = await fetch('/admin/documents', getFetchOptions('GET'));
+            if (!response.ok) throw new Error('Failed to fetch documents.');
+            const data = await response.json();
+            adminDocsTableBody.innerHTML = '';
+            if (data.documents && data.documents.length > 0) {
+                data.documents.forEach(doc => {
+                    const row = document.createElement('tr');
+                    row.style.borderBottom = '1px solid #333';
+                    const sizeKB = (doc.size / 1024).toFixed(2);
+                    const modifiedDate = new Date(doc.last_modified).toLocaleString();
+                    row.innerHTML = `
+                        <td style="padding: 8px;">${doc.filename}</td>
+                        <td style="padding: 8px;">${sizeKB} KB</td>
+                        <td style="padding: 8px;">${modifiedDate}</td>
+                        <td style="padding: 8px; text-align: right;">
+                            <button class="delete-doc-btn btn-danger" data-filename="${doc.filename}" style="padding: 4px 8px; font-size: 0.8em;">Delete</button>
+                        </td>
+                    `;
+                    adminDocsTableBody.appendChild(row);
+                });
+
+                document.querySelectorAll('.delete-doc-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const filename = e.target.getAttribute('data-filename');
+                        if (confirm(`Are you sure you want to permanently delete '${filename}'? This will remove the document and its vectors.`)) {
+                            await deleteAdminDocument(filename);
+                        }
+                    });
+                });
+            } else {
+                adminDocsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #888;">No documents found.</td></tr>';
+            }
+        } catch (error) {
+            adminDocsTableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger-color);">${error.message}</td></tr>`;
+        }
+    }
+
+    async function deleteAdminDocument(filename) {
+        try {
+            const response = await fetch(`/admin/documents/${encodeURIComponent(filename)}`, getFetchOptions('DELETE'));
+            if (!response.ok) throw new Error('Failed to delete document.');
+            fetchAdminDocuments();
+        } catch (error) {
+            alert(`Error generating delete request: ${error.message}`);
+        }
+    }
+
+    async function uploadDocument(file) {
+        if (!file) return;
+        uploadStatusMessage.textContent = 'Uploading and indexing...';
+        uploadStatusMessage.style.color = 'var(--primary-color)';
+        const formData = new FormData();
+        formData.append('file', file);
+        if (uploadDepartmentTag) formData.append('department', uploadDepartmentTag.value);
+        if (uploadHierarchyLevel) formData.append('hierarchy_level', uploadHierarchyLevel.value);
+
+        try {
+            const response = await fetch('/admin/documents', {
+                method: 'POST',
+                // Explicitly omitted Content-Type so browser sets correct multipart/form-data boundary
+                body: formData,
+                credentials: 'include'
+            });
+            if (!response.ok) throw new Error('Upload failed.');
+            uploadStatusMessage.textContent = 'Upload successful! Sync started in background.';
+            uploadStatusMessage.style.color = '#198754';
+            setTimeout(() => { uploadStatusMessage.textContent = ''; }, 3000);
+            fetchAdminDocuments();
+        } catch (error) {
+            uploadStatusMessage.textContent = `Error: ${error.message}`;
+            uploadStatusMessage.style.color = 'var(--danger-color)';
+        }
+    }
+
+    if (documentDropzone && documentFileInput) {
+        documentDropzone.addEventListener('click', () => documentFileInput.click());
+        documentFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) uploadDocument(e.target.files[0]);
+            e.target.value = ''; // reset
+        });
+
+        documentDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            documentDropzone.style.backgroundColor = '#2c2c2c';
+        });
+        documentDropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            documentDropzone.style.backgroundColor = '';
+        });
+        documentDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            documentDropzone.style.backgroundColor = '';
+            if (e.dataTransfer.files.length > 0) {
+                uploadDocument(e.dataTransfer.files[0]);
+            }
+        });
+    }
 
     // --- Ticket Modal Logic ---
     openTicketModalButton.addEventListener('click', () => {

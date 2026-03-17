@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Security, BackgroundTasks, Response, Cookie
+from fastapi import FastAPI, HTTPException, Depends, Security, BackgroundTasks, Response, Cookie, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,9 @@ from .ticket_system import suggest_ticket_team, create_ticket
 from .feedback_system import record_feedback
 from .database_utils import init_all_databases, get_recent_tickets
 from .security import create_access_token, get_current_active_user, AuthException
-from .document_updater import synchronize_documents
+from .document_updater import synchronize_documents, list_admin_documents, upload_admin_document, delete_admin_document
+from .utils import sanitize_tag
+import fastapi
 from .services import shared_services
 
 # --- Configuration and Models ---
@@ -261,6 +263,64 @@ async def trigger_document_sync(background_tasks: BackgroundTasks):
     logger.info("Document synchronization triggered via secure endpoint.")
     background_tasks.add_task(synchronize_documents)
     return {"message": "Document synchronization process started in the background."}
+
+# --- Admin Document Management Endpoints ---
+
+@app.get("/admin/documents")
+async def get_admin_documents(admin_user: UserProfile = Depends(get_current_admin_user)):
+    """Returns a list of all documents currently in the S3 bucket with metadata."""
+    logger.info(f"Admin '{admin_user['user_email']}' requested document list.")
+    docs = list_admin_documents()
+    return {"documents": docs}
+
+@app.post("/admin/documents")
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    department: str = fastapi.Form("GENERAL"),
+    hierarchy_level: int = fastapi.Form(0),
+    admin_user: UserProfile = Depends(get_current_admin_user)
+):
+    """Uploads a new document to S3 with metadata.json and triggers background sync."""
+    logger.info(f"Admin '{admin_user['user_email']}' uploading document: {file.filename}")
+    content = await file.read()
+    
+    # Secure storage path paradigm based on tags
+    safe_dept = sanitize_tag(department)
+    path_prefix = f"departments/{safe_dept}/level_{hierarchy_level}"
+    file_path = f"{path_prefix}/{file.filename}"
+    
+    success = upload_admin_document(file_path, content)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to upload document to S3.")
+        
+    # Generate and deposit metadata.json enforcing privacy sovereignty
+    metadata = {
+        "department_tag": safe_dept,
+        "hierarchy_level_required": hierarchy_level
+    }
+    metadata_path = f"{path_prefix}/metadata.json"
+    upload_admin_document(metadata_path, json.dumps(metadata).encode('utf-8'))
+    
+    # Trigger background sync to ingest the new document into Pinecone
+    background_tasks.add_task(synchronize_documents)
+    return {"message": f"Document '{file.filename}' uploaded securely to {path_prefix}. Sync started."}
+
+@app.delete("/admin/documents/{doc_path:path}")
+async def delete_document(
+    doc_path: str,
+    background_tasks: BackgroundTasks,
+    admin_user: UserProfile = Depends(get_current_admin_user)
+):
+    """Deletes a document from S3 and triggers background sync to remove vectors."""
+    logger.info(f"Admin '{admin_user['user_email']}' deleting document: {doc_path}")
+    success = delete_admin_document(doc_path)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to delete document '{doc_path}' from S3.")
+    
+    # Trigger background sync to remove the vectors from Pinecone
+    background_tasks.add_task(synchronize_documents)
+    return {"message": f"Document '{doc_path}' deleted successfully. Sync started."}
 
 # --- Admin Endpoints (Secured by get_current_admin_user) ---
 @app.get("/admin/config_tags")
