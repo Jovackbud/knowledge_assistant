@@ -64,7 +64,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const documentFileInput = document.getElementById('document-file-input');
     const uploadStatusMessage = document.getElementById('upload-status-message');
     const uploadDepartmentTag = document.getElementById('upload-department-tag');
-    const uploadHierarchyLevel = document.getElementById('upload-hierarchy-level');    // --- State Variables ---
+    const uploadHierarchyLevel = document.getElementById('upload-hierarchy-level');
+
+    // --- State Variables ---
     let currentUserProfile = null;
     let currentUserEmail = null;
     let currentQuestion = null;

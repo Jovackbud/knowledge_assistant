@@ -18,10 +18,14 @@ The backend is built with FastAPI, utilizing Google's Generative AI models for e
     *   Suggests the most relevant support team (e.g., IT, HR, Legal) for a user's question using semantic similarity.
     *   Allows users to create support tickets, recording the question, chat history, system-suggested team, and user-selected team.
 *   **User Feedback Mechanism**: Enables users to provide feedback (thumbs up/down) on AI answers, helping to improve the system over time.
-*   **Admin Panel**:
-    *   Manage user permissions (hierarchy level, department/project memberships, contextual roles, admin status).
-    *   View recent support tickets.
+*   **Sovereign Command Center (Admin Dashboard)**:
+    *   Unified, full-screen administrative interface replacing fragmented modals.
+    *   **Secure Document Uploads**: Enforces privacy sovereignty by requiring Department and Hierarchy Level tags *before* ingestion.
+    *   **Metadata Sovereignty**: Automatically generates `metadata.json` sidecars on S3 to lock down document access at the source.
+    *   Manage user permissions (Hierarchy Level, Department/Project memberships, Contextual Roles, Admin status).
+    *   View recent support tickets and operational logs.
     *   Trigger manual document synchronization.
+*   **Unified Dark Mode Aesthetic**: Integrated 60fps+ premium dark theme across the entire application for low-light productivity and visual cohesion.
 *   **Secure Authentication**: Implements JWT-based authentication using HTTP-only, secure cookies for session management.
 *   **Scalable Architecture**: Designed for cloud deployment with containerization support, leveraging managed services like Pinecone, S3, and PostgreSQL.
 *   **Health Check Endpoint**: A `/healthz` endpoint for monitoring application status.
@@ -30,7 +34,7 @@ The backend is built with FastAPI, utilizing Google's Generative AI models for e
 
 *   **Backend Framework**: FastAPI
 *   **Vector Database**: Pinecone
-*   **Large Language Models (LLM) & Embeddings**: Google Generative AI (Gemini Flash, Text Embedding 004)
+*   **Large Language Models (LLM) & Embeddings**: Google Generative AI (Gemini 2.5 Flash Lite, Gemini Embedding 001)
 *   **Document Storage**: AWS S3 or S3-compatible (e.g., Cloudflare R2)
 *   **Relational Database**: PostgreSQL (via SQLAlchemy)
 *   **Orchestration & RAG**: LangChain
@@ -101,7 +105,7 @@ PINECONE_INDEX_NAME="knowledge-assistant-v2"
 
 # --- Google Generative AI Configuration ---
 GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY" # Used by langchain-google-genai
-EMBEDDING_MODEL="models/text-embedding-004"
+EMBEDDING_MODEL="models/gemini-embedding-001"
 LLM_GENERATION_MODEL="gemini-2.5-flash-lite"
 LLM_REPHRASE_MODEL="gemini-2.5-flash-lite"
 
