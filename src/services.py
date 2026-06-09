@@ -13,22 +13,30 @@ class SharedServices:
         self._initialize_embedders()
 
     def _initialize_embedders(self):
-        logger.info("Initializing shared Google embedding clients...")
+        logger.info(f"Initializing shared Google embedding clients with model='{EMBEDDING_MODEL}'...")
         try:
             # Client optimized for embedding documents to be stored
             self.document_embedder = GoogleGenerativeAIEmbeddings(
                 model=EMBEDDING_MODEL,
                 task_type="RETRIEVAL_DOCUMENT"
             )
-            
+
             # Client optimized for embedding search queries
             self.query_embedder = GoogleGenerativeAIEmbeddings(
                 model=EMBEDDING_MODEL,
                 task_type="RETRIEVAL_QUERY"
             )
-            logger.info("✅ Shared Google document and query embedders loaded successfully.")
+
+            # --- Startup probe: fail fast if the model name is wrong/deprecated ---
+            # A single cheap call catches 404/auth errors at boot, not mid-request.
+            self.query_embedder.embed_query("probe")
+            logger.info(f"✅ Embedding model '{EMBEDDING_MODEL}' validated and ready.")
         except Exception as e:
-            logger.error(f"❌ Failed to load shared Google embedders: {e}", exc_info=True)
+            logger.error(
+                f"❌ Failed to initialize or validate embedder (model='{EMBEDDING_MODEL}'): {e}. "
+                "Check EMBEDDING_MODEL_NAME env var — likely set to a deprecated model name.",
+                exc_info=True
+            )
             raise
 
 # Create a single, global instance of the services
