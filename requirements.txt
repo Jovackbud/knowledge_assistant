@@ -42,6 +42,10 @@ bcrypt==4.3.0
 python-jose==3.5.0
 cryptography==45.0.5
 
+# --- File Upload Support ---
+# Required by FastAPI for any endpoint using File(...) or Form(...) parameters.
+python-multipart==0.0.20
+
 # --- Custom Features ---
 # For the ticket suggestion feature.
 numpy
