@@ -20,7 +20,9 @@ FlashRank==0.2.10
 
 # --- Database Client ---
 # Using Pinecone for the vector database and neon for app database.
+pinecone==6.0.2
 langchain-pinecone==0.2.9
+langchain-text-splitters==0.3.8
 SQLAlchemy>=2.0.0
 psycopg2-binary
 
