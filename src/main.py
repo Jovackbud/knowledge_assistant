@@ -1,6 +1,8 @@
 import os
 import json
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -10,16 +12,21 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.status import HTTP_403_FORBIDDEN, HTTP_401_UNAUTHORIZED
 from fastapi.security import APIKeyHeader
+from pydantic import BaseModel
 
 # --- Local Imports ---
 from .auth_service import fetch_user_access_profile, update_user_permissions_by_admin, remove_user_by_admin
 from .rag_processor import RAGService
 from .ticket_system import suggest_ticket_team, create_ticket
 from .feedback_system import record_feedback
-from .database_utils import init_all_databases, get_recent_tickets
+from .database_utils import (
+    init_all_databases, get_recent_tickets, update_ticket_status,
+    save_ticket_reply, get_ticket_replies, get_ticket_by_id
+)
 from .security import create_access_token, get_current_active_user, AuthException
 from .document_updater import synchronize_documents, list_admin_documents, upload_admin_document, delete_admin_document
 from .utils import sanitize_tag
+from .email_service import send_ticket_reply
 import fastapi
 from .services import shared_services
 
@@ -31,26 +38,46 @@ from .config import (
     FEEDBACK_HELPFUL, FEEDBACK_NOT_HELPFUL
 )
 
+# --- Logging ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- Path Configuration ---
+SRC_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SRC_DIR.parent
+STATIC_DIR = PROJECT_ROOT / "static"
+
+# --- Sync concurrency guard ---
+_sync_lock = asyncio.Lock()
+
+# --- App Lifecycle (lifespan replaces deprecated on_event) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global rag_service
+    logger.info("--- Application Startup ---")
+    try:
+        init_all_databases()
+        rag_service = RAGService.from_config()
+        logger.info("--- Startup Complete ---")
+    except Exception as e:
+        logger.critical(f"FATAL: Application startup failed: {e}", exc_info=True)
+        raise
+    yield
+    logger.info("--- Application Shutdown ---")
+
+
 # --- App Setup ---
-app = FastAPI(title="AI4AI Knowledge Assistant")
+app = FastAPI(title="AI4AI Knowledge Assistant", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH"],  # FIXED: added DELETE and PATCH
     allow_headers=["*"],
 )
 
-rag_service: Optional[RAGService] = None
-
-# --- Path and Logging Configuration ---
-SRC_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SRC_DIR.parent
-STATIC_DIR = PROJECT_ROOT / "static"
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+rag_service: Optional[RAGService] = None  # single declaration
 
 # --- FastAPI Dependencies for Security ---
 
@@ -67,17 +94,13 @@ def get_current_user_profile(access_token: Optional[str] = Cookie(None)) -> User
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
             detail=e.detail,
-            headers={"WWW-Authenticate": "Bearer"}, 
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-def get_current_admin_user(current_user: UserProfile  = Depends(get_current_user_profile)) -> UserProfile:
-    if not current_user.get("is_admin"): # Check the boolean flag
-        logger.warning(
-            f"Admin access denied for user '{current_user.get('user_email')}'. "
-            f"User is not flagged as an admin."
-        )
+def get_current_admin_user(current_user: UserProfile = Depends(get_current_user_profile)) -> UserProfile:
+    if not current_user.get("is_admin"):
+        logger.warning(f"Admin access denied for user '{current_user.get('user_email')}'.")
         raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Forbidden: User does not have admin privileges.")
-    
     logger.info(f"Admin access granted for user '{current_user.get('user_email')}'.")
     return current_user
 
@@ -87,29 +110,14 @@ SYNC_SECRET_TOKEN = os.getenv("SYNC_SECRET_TOKEN")
 
 async def get_api_key(api_key: str = Security(api_key_header)):
     if not SYNC_SECRET_TOKEN:
-        logger.error("SYNC_SECRET_TOKEN is not set in the environment. Sync endpoint is disabled.")
+        logger.error("SYNC_SECRET_TOKEN is not set. Sync endpoint is disabled.")
         raise HTTPException(status_code=500, detail="Sync service is not configured.")
     if api_key != SYNC_SECRET_TOKEN:
         logger.warning("Invalid or missing sync token provided.")
         raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid or missing sync token")
     return api_key
 
-# --- App Lifecycle Events ---
-
-@app.on_event("startup")
-async def startup_event():
-    global rag_service
-    logger.info("--- Application Startup ---")
-    try:
-        rag_service = RAGService.from_config()
-        
-        logger.info("--- Startup Complete ---")
-    except Exception as e:
-        logger.critical(f"FATAL: Application startup failed: {e}", exc_info=True)
-        raise
-
 # --- Static Files and Root Endpoint ---
-
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
@@ -119,29 +127,28 @@ async def root():
         return FileResponse(str(html_file_path))
     raise HTTPException(status_code=404, detail="index.html not found")
 
-# --- Authentication Endpoint ---
+# --- Authentication Endpoints ---
 
 @app.post("/auth/login")
-async def login(credentials: AuthCredentials, response: Response): # Add response: Response here
+async def login(credentials: AuthCredentials, response: Response):
     try:
         user_profile = fetch_user_access_profile(credentials.email)
         if not user_profile:
             raise HTTPException(status_code=404, detail="User not found or credentials incorrect.")
 
-        # Token is created
         access_token = create_access_token(data={"sub": user_profile["user_email"]})
-        
-        # --- NEW: Set the token in a secure, httpOnly cookie ---
-        response.set_cookie(
+
+        # Set secure httpOnly cookie — all attributes mirrored for correct browser behaviour
+        cookie_kwargs = dict(
             key="access_token",
             value=access_token,
-            httponly=True,          # Prevents JavaScript access (XSS protection)
-            samesite="strict",      # CSRF protection
-            secure=True,            # Only send over HTTPS (essential for production)
-            max_age=60 * 60 * 8,    # 8-hour expiry
+            httponly=True,
+            samesite="strict",
+            secure=True,
+            max_age=60 * 60 * 8,
             path="/"
         )
-        
+        response.set_cookie(**cookie_kwargs)
         return {"user_profile": user_profile}
 
     except HTTPException as http_exc:
@@ -152,18 +159,19 @@ async def login(credentials: AuthCredentials, response: Response): # Add respons
 
 @app.post("/auth/logout")
 async def logout(response: Response):
-    """
-    Clears the access_token cookie, securely logging the user out.
-    """
-    response.delete_cookie(key="access_token", path="/")
+    """Clears the access_token cookie with all matching attributes."""
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=True,      # Must match set_cookie attributes or some browsers ignore deletion
+        samesite="strict",
+        secure=True
+    )
     return {"message": "Logout successful"}
 
 @app.post("/auth/me")
 async def read_users_me(current_user: UserProfile = Depends(get_current_user_profile)):
-    """
-    Endpoint to get the current user's profile based on their valid cookie.
-    This is used for session validation on the frontend.
-    """
+    """Session validation endpoint used by the frontend on page load."""
     return {"user_profile": current_user}
 
 # --- Core RAG Endpoint ---
@@ -171,41 +179,34 @@ async def read_users_me(current_user: UserProfile = Depends(get_current_user_pro
 async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
     if rag_service is None:
         raise HTTPException(status_code=503, detail="RAG Service is not available.")
-    
+
     user_email = current_user.get("user_email")
-    logger.info(f"Chat request received from authenticated user: {user_email}")
+    logger.info(f"Chat request received from: {user_email}")
 
     try:
-        # 1. Get the unified, history-aware RAG chain from the service.
         conversational_rag_chain = rag_service.get_rag_chain(current_user, request.chat_history)
-        
+
         async def stream_generator():
             try:
-                # 2. Define the input dictionary for the chain.
                 chain_input = {
                     "question": request.prompt,
                     "chat_history": request.chat_history
                 }
-                
                 final_sources = []
-                # 3. Stream the events from the chain.
                 async for event in conversational_rag_chain.astream_events(chain_input, version="v1"):
                     kind = event["event"]
                     name = event.get("name")
 
-                    # Stream out the answer chunks as they are generated by the LLM.
                     if kind == "on_chat_model_stream" and name == "final_answer_llm":
                         chunk_content = event["data"]["chunk"].content
                         if chunk_content:
                             yield f"data: {json.dumps({'answer_chunk': chunk_content})}\n\n"
 
-                    # When the named retrieval/reranking step ends, capture its output (the documents).
                     if kind == "on_chain_end" and name == "retriever_and_reranker_step":
                         final_docs = event["data"].get("output", [])
                         if final_docs:
                             final_sources = list(set([doc.metadata.get("source", "Unknown") for doc in final_docs]))
 
-                # After the stream is complete, send the consolidated sources.
                 if final_sources:
                     yield f"data: {json.dumps({'sources': final_sources})}\n\n"
 
@@ -217,7 +218,7 @@ async def rag_chat(request: RAGRequest, current_user: Dict[str, Any] = Depends(g
 
     except Exception as e:
         logger.error(f"Error creating RAG chain for user {user_email}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing chat request.")
+        raise HTTPException(status_code=500, detail="Error processing chat request.")
 
 
 # --- Ticket System Endpoints ---
@@ -229,7 +230,7 @@ async def suggest_team_endpoint(request: SuggestTeamRequest, _: Dict[str, Any] =
 @app.post("/tickets/create")
 async def create_ticket_endpoint(request: CreateTicketRequest, current_user: Dict[str, Any] = Depends(get_current_user_profile)):
     if request.selected_team not in TICKET_TEAMS:
-        raise HTTPException(status_code=400, detail=f"Invalid team selected.")
+        raise HTTPException(status_code=400, detail="Invalid team selected.")
 
     ticket_id = create_ticket(
         user_email=current_user["user_email"],
@@ -260,15 +261,18 @@ async def record_feedback_endpoint(request: FeedbackRequest, current_user: Dict[
 # --- Scheduled Sync Endpoint ---
 @app.post("/admin/sync_documents", dependencies=[Depends(get_api_key)])
 async def trigger_document_sync(background_tasks: BackgroundTasks):
-    logger.info("Document synchronization triggered via secure endpoint.")
-    background_tasks.add_task(synchronize_documents)
+    if _sync_lock.locked():
+        return {"message": "Sync already in progress. Skipped duplicate trigger."}
+    async def _guarded_sync():
+        async with _sync_lock:
+            synchronize_documents()
+    background_tasks.add_task(_guarded_sync)
     return {"message": "Document synchronization process started in the background."}
 
 # --- Admin Document Management Endpoints ---
 
 @app.get("/admin/documents")
 async def get_admin_documents(admin_user: UserProfile = Depends(get_current_admin_user)):
-    """Returns a list of all documents currently in the S3 bucket with metadata."""
     logger.info(f"Admin '{admin_user['user_email']}' requested document list.")
     docs = list_admin_documents()
     return {"documents": docs}
@@ -281,30 +285,28 @@ async def upload_document(
     hierarchy_level: int = fastapi.Form(0),
     admin_user: UserProfile = Depends(get_current_admin_user)
 ):
-    """Uploads a new document to S3 with metadata.json and triggers background sync."""
-    logger.info(f"Admin '{admin_user['user_email']}' uploading document: {file.filename}")
+    logger.info(f"Admin '{admin_user['user_email']}' uploading: {file.filename}")
     content = await file.read()
-    
-    # Secure storage path paradigm based on tags
+
     safe_dept = sanitize_tag(department)
     path_prefix = f"departments/{safe_dept}/level_{hierarchy_level}"
     file_path = f"{path_prefix}/{file.filename}"
-    
+
     success = upload_admin_document(file_path, content)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to upload document to S3.")
-        
-    # Generate and deposit metadata.json enforcing privacy sovereignty
-    metadata = {
-        "department_tag": safe_dept,
-        "hierarchy_level_required": hierarchy_level
-    }
+
+    metadata = {"department_tag": safe_dept, "hierarchy_level_required": hierarchy_level}
     metadata_path = f"{path_prefix}/metadata.json"
     upload_admin_document(metadata_path, json.dumps(metadata).encode('utf-8'))
-    
-    # Trigger background sync to ingest the new document into Pinecone
-    background_tasks.add_task(synchronize_documents)
-    return {"message": f"Document '{file.filename}' uploaded securely to {path_prefix}. Sync started."}
+
+    if not _sync_lock.locked():
+        async def _guarded_sync():
+            async with _sync_lock:
+                synchronize_documents()
+        background_tasks.add_task(_guarded_sync)
+
+    return {"message": f"Document '{file.filename}' uploaded to {path_prefix}. Sync started."}
 
 @app.delete("/admin/documents/{doc_path:path}")
 async def delete_document(
@@ -312,17 +314,21 @@ async def delete_document(
     background_tasks: BackgroundTasks,
     admin_user: UserProfile = Depends(get_current_admin_user)
 ):
-    """Deletes a document from S3 and triggers background sync to remove vectors."""
-    logger.info(f"Admin '{admin_user['user_email']}' deleting document: {doc_path}")
+    logger.info(f"Admin '{admin_user['user_email']}' deleting: {doc_path}")
     success = delete_admin_document(doc_path)
     if not success:
-        raise HTTPException(status_code=500, detail=f"Failed to delete document '{doc_path}' from S3.")
-    
-    # Trigger background sync to remove the vectors from Pinecone
-    background_tasks.add_task(synchronize_documents)
-    return {"message": f"Document '{doc_path}' deleted successfully. Sync started."}
+        raise HTTPException(status_code=500, detail=f"Failed to delete '{doc_path}' from S3.")
 
-# --- Admin Endpoints (Secured by get_current_admin_user) ---
+    if not _sync_lock.locked():
+        async def _guarded_sync():
+            async with _sync_lock:
+                synchronize_documents()
+        background_tasks.add_task(_guarded_sync)
+
+    return {"message": f"Document '{doc_path}' deleted. Sync started."}
+
+# --- Admin User Management Endpoints ---
+
 @app.get("/admin/config_tags")
 async def get_config_tags(_: UserProfile = Depends(get_current_admin_user)):
     return {"known_department_tags": KNOWN_DEPARTMENT_TAGS}
@@ -351,7 +357,6 @@ async def admin_remove_user(payload: UserRemovalRequest, admin_user: UserProfile
     target_email = payload.target_email
     if target_email == admin_user['user_email']:
         raise HTTPException(status_code=400, detail="Admins cannot remove themselves.")
-        
     logger.info(f"Admin '{admin_user['user_email']}' removing user '{target_email}'.")
     removal_result = remove_user_by_admin(target_email)
     if "error" in removal_result:
@@ -359,25 +364,111 @@ async def admin_remove_user(payload: UserRemovalRequest, admin_user: UserProfile
         raise HTTPException(status_code=status_code, detail=removal_result["error"])
     return removal_result
 
+# --- Admin Ticket Endpoints ---
 
 @app.get("/admin/recent_tickets")
 async def view_recent_tickets(admin_user: UserProfile = Depends(get_current_admin_user)):
-    """
-    Admin endpoint to view the most recent support tickets.
-    """
-    logger.info(f"Admin '{admin_user['user_email']}' is viewing recent tickets.")
+    logger.info(f"Admin '{admin_user['user_email']}' viewing recent tickets.")
     try:
-        recent_tickets = get_recent_tickets(limit=30) # Fetch up to 30 tickets
-        return recent_tickets
+        return get_recent_tickets(limit=50)
     except Exception as e:
-        logger.error(f"Error fetching recent tickets for admin: {e}", exc_info=True)
+        logger.error(f"Error fetching tickets: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve recent tickets.")
-    
+
+
+class TicketStatusUpdate(BaseModel):
+    status: str
+
+VALID_TICKET_STATUSES = {"Open", "In Progress", "Resolved", "Closed"}
+
+@app.patch("/admin/tickets/{ticket_id}")
+async def update_ticket(
+    ticket_id: int,
+    payload: TicketStatusUpdate,
+    admin_user: UserProfile = Depends(get_current_admin_user)
+):
+    """Admin updates the status of a support ticket."""
+    if payload.status not in VALID_TICKET_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {VALID_TICKET_STATUSES}")
+    logger.info(f"Admin '{admin_user['user_email']}' setting ticket #{ticket_id} to '{payload.status}'.")
+    success = update_ticket_status(ticket_id, payload.status)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found or update failed.")
+    return {"message": f"Ticket #{ticket_id} updated to '{payload.status}'."}
+
+
+class TicketReplyRequest(BaseModel):
+    reply_text: str
+    subject: str = "Your Support Ticket"
+
+
+@app.get("/admin/tickets/{ticket_id}/replies")
+async def get_replies(
+    ticket_id: int,
+    admin_user: UserProfile = Depends(get_current_admin_user)
+):
+    """Returns the reply history for a ticket."""
+    replies = get_ticket_replies(ticket_id)
+    # Convert datetime objects to ISO strings for JSON serialisation
+    for r in replies:
+        if hasattr(r.get("timestamp"), "isoformat"):
+            r["timestamp"] = r["timestamp"].isoformat()
+    return {"replies": replies}
+
+
+@app.post("/admin/tickets/{ticket_id}/reply")
+async def reply_to_ticket(
+    ticket_id: int,
+    payload: TicketReplyRequest,
+    admin_user: UserProfile = Depends(get_current_admin_user)
+):
+    """
+    Send an email reply to the ticket creator and store the reply in the database.
+    The reply is stored regardless of whether the email send succeeds,
+    so no content is ever silently lost.
+    """
+    if not payload.reply_text.strip():
+        raise HTTPException(status_code=400, detail="Reply text cannot be empty.")
+
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
+
+    admin_email = admin_user["user_email"]
+    user_email  = ticket["user_email"]
+
+    # Attempt to send the email
+    email_sent = send_ticket_reply(
+        ticket_id=ticket_id,
+        to_email=user_email,
+        subject=payload.subject,
+        reply_text=payload.reply_text,
+        admin_name=admin_email,
+    )
+
+    # Always persist the reply — even if the email failed
+    reply_id = save_ticket_reply(
+        ticket_id=ticket_id,
+        admin_email=admin_email,
+        reply_text=payload.reply_text,
+        email_sent=email_sent
+    )
+
+    if reply_id is None:
+        raise HTTPException(status_code=500, detail="Reply could not be saved to the database.")
+
+    if email_sent:
+        return {"message": f"Reply sent to {user_email} and saved.", "reply_id": reply_id, "email_sent": True}
+    else:
+        return {
+            "message": f"Reply saved but email could NOT be sent to {user_email}. Check SMTP configuration.",
+            "reply_id": reply_id,
+            "email_sent": False
+        }
+
+
+# --- Health Check ---
 @app.get("/healthz")
 async def health_check():
-    """
-    Basic health check endpoint designed to be hit by a cron job.
-    It confirms the application is running and responsive.
-    """
-    logger.info("Health check endpoint hit.")
+    logger.info("Health check hit.")
     return {"status": "ok"}

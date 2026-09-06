@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_pinecone import Pinecone as PineconeVectorStore
@@ -24,6 +25,19 @@ from .config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _dicts_to_messages(history: List[Dict[str, str]]) -> List[BaseMessage]:
+    """Converts chat history dicts to LangChain BaseMessage objects."""
+    messages: List[BaseMessage] = []
+    for msg in history:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        elif role == "assistant":
+            messages.append(AIMessage(content=content))
+    return messages
 
 
 class RAGService:
@@ -81,18 +95,8 @@ class RAGService:
     def from_config(cls):
         """Initializes the RAGService from configuration and environment variables."""
         logger.info(f"RAGService Init: Embedding='{EMBEDDING_MODEL}', Pinecone Index='{PINECONE_INDEX_NAME}'")
-        try:
-            llm = ChatGoogleGenerativeAI(model=LLM_GENERATION_MODEL)
-            logger.info("RAG: Successfully initialized Google Generative AI LLM.")
-        except Exception as e:
-            logger.error("RAG: Failed to initialize Google Generative AI LLM.", exc_info=True)
-            raise RuntimeError(f"Google Generative AI LLM init failed: {e}")
-
-        # The shared_services object is already initialized at startup.
-        # We get the embedding model from it here.
+        # Note: LLM is initialised inside __init__; no need to create it here.
         vector_store = cls._init_vector_store(PINECONE_INDEX_NAME)
-        
-        # Now we call the new, simpler constructor with the correct arguments.
         return cls(vector_store=vector_store)
 
     @staticmethod
@@ -157,9 +161,10 @@ class RAGService:
         prepare_inputs_chain = RunnableLambda(
             lambda x: {
                 "question": x["question"],
-                "chat_history": x["chat_history"],
-                # If no history, retrieval_question is the same as the original.
-                # If there is history, invoke the rephrase_chain.
+                "chat_history": _dicts_to_messages(x["chat_history"]),
+                # If no history, retrieval_question == original question.
+                # If there IS history, invoke the rephrase chain synchronously
+                # (acceptable since the whole chain runs in a thread pool via LangChain).
                 "retrieval_question": x["question"] if not x.get("chat_history") else self.rephrase_chain.invoke(x)
             },
             name="prepare_inputs_step"
@@ -224,5 +229,5 @@ class RAGService:
                 ]}
             ]
         }
-        logger.info(f"Built Pinecone filter for {profile.get('user_email')}: {json.dumps(final_filter)}")
+        logger.debug(f"Pinecone filter for {profile.get('user_email')}: {str(final_filter)[:200]}")
         return final_filter

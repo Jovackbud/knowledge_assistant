@@ -9,13 +9,18 @@ from .config import UserProfile
 
 # --- Configuration ---
 
-# This should be a long, random string. You can generate one with:
-# openssl rand -hex 32
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("FATAL: JWT_SECRET_KEY environment variable is not set. Application cannot start.")
+_INSECURE_DEFAULT = "a_very_insecure_default_secret_key_for_dev_only"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", _INSECURE_DEFAULT)
+if SECRET_KEY == _INSECURE_DEFAULT:
+    import sys
+    # Allow insecure default only when running locally (no RENDER_EXTERNAL_URL set)
+    if os.getenv("RENDER_EXTERNAL_URL"):
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY is not set or is using the insecure default. "
+            "Set a strong random value via: openssl rand -hex 32"
+        )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8 # 8 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 8)))
 
 # We aren't using passwords yet, but this is the standard way to set it up.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

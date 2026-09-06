@@ -8,15 +8,21 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-# --- API & Server Configuration ---
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+import logging as _logging
+_cfg_logger = _logging.getLogger(__name__)
 
-# Define the list of allowed origins for CORS.
+# --- API & Server Configuration ---
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+# Strip any accidental scheme prefix so we never build "https://https://…"
+RENDER_EXTERNAL_URL = RENDER_EXTERNAL_URL.replace("https://", "").replace("http://", "")
+
 if RENDER_EXTERNAL_URL:
-    # Production environment
     ALLOWED_ORIGINS = [f"https://{RENDER_EXTERNAL_URL}"]
 else:
-    # Local development environment
+    _cfg_logger.warning(
+        "RENDER_EXTERNAL_URL is not set. Defaulting CORS to localhost. "
+        "This WILL break cross-origin requests in production."
+    )
     ALLOWED_ORIGINS = [
         "http://127.0.0.1:8000",
         "http://localhost:8000",
@@ -71,10 +77,10 @@ ADMIN_HIERARCHY_LEVEL = 3 # Define the admin hierarchy level
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL_NAME", "models/gemini-embedding-001")
-RERANKER_MODEL = "ms-marco-MiniLM-L-12-v2"
-RERANKER_SCORE_THRESHOLD = 0.2
-LLM_GENERATION_MODEL = "gemini-2.5-flash-lite"
-LLM_REPHRASE_MODEL = "gemini-2.5-flash-lite"
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "ms-marco-MiniLM-L-12-v2")
+RERANKER_SCORE_THRESHOLD = float(os.getenv("RERANKER_SCORE_THRESHOLD", "0.2"))
+LLM_GENERATION_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+LLM_REPHRASE_MODEL = os.getenv("LLM_REPHRASE_MODEL", "gemini-2.5-flash-lite")
 
 # --- Ticket System ---
 TICKET_TEAMS = ["Helpdesk", "HR", "IT", "Legal", "General"]
@@ -109,7 +115,7 @@ class FeedbackRequest(BaseModel):
     feedback_type: str # e.g., "👍" or "👎"
 
 class PermissionsModel(BaseModel):
-    user_hierarchy_level: Optional[int] = Field(None, ge=0, le=3) # ge=greater than or equal, le=less than or equal
+    user_hierarchy_level: Optional[int] = Field(None, ge=0, le=ADMIN_HIERARCHY_LEVEL)
     departments: Optional[List[str]] = None
     projects_membership: Optional[List[str]] = None
     contextual_roles: Optional[Dict[str, List[str]]] = None

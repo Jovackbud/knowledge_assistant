@@ -1,671 +1,932 @@
-// static/app.js - UPDATED
+// static/app.js
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Element Selectors ---
-    const loginSection = document.getElementById('login-section');
-    const userProfileControls = document.getElementById('user-profile-controls');
-    const chatSection = document.getElementById('chat-section');
-    const postChatActions = document.getElementById('post-chat-actions');
-    const ticketModal = document.getElementById('ticket-modal');
-    const emailInput = document.getElementById('email');
-    const loginButton = document.getElementById('loginButton');
-    const loginError = document.getElementById('login-error');
-    const profileEmail = document.getElementById('profile-email');
-    const logoutButton = document.getElementById('logoutButton');
-    const chatHistoryDiv = document.getElementById('chat-history');
-    const chatInput = document.getElementById('chat-input');
-    const sendChatButton = document.getElementById('sendChatButton');
-    const feedbackButtonsDiv = document.getElementById('feedback-buttons');
-    const helpfulButton = document.getElementById('helpfulButton');
-    const notHelpfulButton = document.getElementById('notHelpfulButton');
-    const feedbackMessage = document.getElementById('feedback-message');
-    const openTicketModalButton = document.getElementById('openTicketModalButton');
-    const ticketQuestionTextarea = document.getElementById('ticket-question');
-    const ticketTeamSelect = document.getElementById('ticket-team');
-    const teamSuggestionP = document.getElementById('team-suggestion');
-    const submitTicketButton = document.getElementById('submitTicketButton');
-    const cancelTicketButton = document.getElementById('cancelTicketButton');
-    const ticketSubmissionMessage = document.getElementById('ticket-submission-message');
-    const adminControlsArea = document.getElementById('admin-controls-area');
-    const viewTargetUserEmailInput = document.getElementById('view-target-user-email');
-    const viewPermissionsButton = document.getElementById('viewPermissionsButton');
-    const adminViewPermissionsMessage = document.getElementById('admin-view-permissions-message');
-    const userPermissionsDisplayDiv = document.getElementById('user-permissions-display');
-    const displayUserEmailSpan = document.getElementById('display-user-email');
-    const displayUserPermissionsJsonPre = document.getElementById('display-user-permissions-json');
-    const adminPermissionsForm = document.getElementById('admin-permissions-form');
-    const targetUserEmailInput = document.getElementById('target-user-email');
-    const targetHierarchyLevelInput = document.getElementById('target-hierarchy-level');
-    // REMOVED: const targetDepartmentsInput = document.getElementById('target-departments');
-    const targetProjectsInput = document.getElementById('target-projects');
-    const roleContextTagInput = document.getElementById('role-context-tag');
-    const roleNameTagInput = document.getElementById('role-name-tag');
-    const addRoleButton = document.getElementById('addRoleButton');
-    const contextualRolesPreview = document.getElementById('contextual-roles-preview');
-    const adminPermissionsMessage = document.getElementById('admin-permissions-message');
-    const removeTargetUserEmailInput = document.getElementById('remove-target-user-email');
-    const removeUserButton = document.getElementById('removeUserButton');
-    const adminRemoveUserMessage = document.getElementById('admin-remove-user-message');
-    const openAdminDashboardButton = document.getElementById('openAdminDashboardButton');
-    const closeAdminDashboardButton = document.getElementById('closeAdminDashboardButton');
-    const adminDashboardSection = document.getElementById('admin-dashboard-section');
-    const adminNavButtons = document.querySelectorAll('.admin-nav-button');
-    const adminPanels = document.querySelectorAll('.admin-panel');
-    const ticketsLoadingMessage = document.getElementById('tickets-loading-message');
-    const ticketsTableContainer = document.getElementById('tickets-table-container');
-    const ticketsTableBody = document.getElementById('tickets-table-body');
-    // --- NEW SELECTORS for simplified admin panel ---
-    const targetIsAdminInput = document.getElementById('target-is-admin');
-    const targetDepartmentsGroup = document.getElementById('target-departments-group');
-    
-    // --- NEW SELECTORS for Document Admin ---
-    const refreshDocsButton = document.getElementById('refreshDocsButton');
-    const adminDocsTableBody = document.getElementById('admin-docs-table-body');
-    const documentDropzone = document.getElementById('document-dropzone');
-    const documentFileInput = document.getElementById('document-file-input');
-    const uploadStatusMessage = document.getElementById('upload-status-message');
-    const uploadDepartmentTag = document.getElementById('upload-department-tag');
-    const uploadHierarchyLevel = document.getElementById('upload-hierarchy-level');
 
-    // --- State Variables ---
-    let currentUserProfile = null;
-    let currentUserEmail = null;
-    let currentQuestion = null;
-    let currentAnswer = null;
-    let chatHistory = [];
-    let contextualRolesObject = {};
-    // REMOVED: const ADMIN_LEVEL = 3; // No longer needed, logic uses is_admin flag
+    // ═══════════════════════════════════════════════
+    //  Element References
+    // ═══════════════════════════════════════════════
+    const loginView            = document.getElementById('login-view');
+    const chatView             = document.getElementById('chat-view');
+    const adminView            = document.getElementById('admin-view');
 
-    // --- Helper for fetch options ---
-    const getFetchOptions = (method = 'GET', body = null) => {
-        const options = {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
-        };
-        if (body) {
-            options.body = JSON.stringify(body);
-        }
-        return options;
-    };
+    // Login
+    const emailInput           = document.getElementById('email');
+    const loginButton          = document.getElementById('loginButton');
+    const loginError           = document.getElementById('login-error');
 
-    // --- Visibility & UI Functions ---
-    function showLogin() {
-        [userProfileControls, chatSection, postChatActions, adminControlsArea, userPermissionsDisplayDiv, adminDashboardSection].forEach(el => {
-            if (el) el.classList.add('hidden');
+    // Top bar (populated dynamically)
+    const topbarActions        = document.getElementById('topbar-actions');
+
+    // Chat
+    const chatMessages         = document.getElementById('chat-messages');
+    const welcomeSplash        = document.getElementById('welcome-splash');
+    const chatInput            = document.getElementById('chat-input');
+    const sendChatButton       = document.getElementById('sendChatButton');
+    const postChatBar          = document.getElementById('post-chat-bar');
+    const helpfulButton        = document.getElementById('helpfulButton');
+    const notHelpfulButton     = document.getElementById('notHelpfulButton');
+    const feedbackMessage      = document.getElementById('feedback-message');
+    const newChatButton        = document.getElementById('newChatButton');
+
+    // Admin nav
+    const closeAdminBtn        = document.getElementById('closeAdminBtn');
+    const adminNavBtns         = document.querySelectorAll('.admin-nav-btn');
+    const adminPanels          = document.querySelectorAll('.admin-panel');
+
+    // Docs panel
+    const docsTableBody        = document.getElementById('docs-tbody');
+    const refreshDocsBtn       = document.getElementById('refreshDocsBtn');
+    const dropzone             = document.getElementById('dropzone');
+    const docFileInput         = document.getElementById('doc-file-input');
+    const uploadStatus         = document.getElementById('upload-status');
+    const uploadDept           = document.getElementById('upload-dept');
+    const uploadLevel          = document.getElementById('upload-level');
+
+    // Tickets panel
+    const ticketsStatus        = document.getElementById('tickets-status');
+    const ticketsContainer     = document.getElementById('tickets-container');
+    const ticketsTbody         = document.getElementById('tickets-tbody');
+
+    // View perms
+    const viewEmailInput       = document.getElementById('view-email');
+    const viewPermsBtn         = document.getElementById('viewPermsBtn');
+    const viewPermsMsg         = document.getElementById('view-perms-msg');
+    const permsDisplay         = document.getElementById('perms-display');
+    const permsEmailLabel      = document.getElementById('perms-email-label');
+    const permsJson            = document.getElementById('perms-json');
+
+    // Manage perms
+    const permsForm            = document.getElementById('perms-form');
+    const targetEmailInput     = document.getElementById('target-email');
+    const targetLevelInput     = document.getElementById('target-level');
+    const targetIsAdminInput   = document.getElementById('target-is-admin');
+    const deptCheckboxes       = document.getElementById('dept-checkboxes');
+    const targetProjectsInput  = document.getElementById('target-projects');
+    const roleCtxInput         = document.getElementById('role-ctx');
+    const roleNameInput        = document.getElementById('role-name');
+    const addRoleBtn           = document.getElementById('addRoleBtn');
+    const rolesPreview         = document.getElementById('roles-preview');
+    const permsFormMsg         = document.getElementById('perms-form-msg');
+
+    // Remove user
+    const removeEmailInput     = document.getElementById('remove-email');
+    const removeUserBtn        = document.getElementById('removeUserBtn');
+    const removeMsg            = document.getElementById('remove-msg');
+
+    // Ticket modal
+    const ticketModal          = document.getElementById('ticket-modal');
+    const ticketQuestion       = document.getElementById('ticket-question');
+    const ticketTeam           = document.getElementById('ticket-team');
+    const teamSuggestion       = document.getElementById('team-suggestion');
+    const cancelTicketBtn      = document.getElementById('cancelTicketBtn');
+    const submitTicketBtn      = document.getElementById('submitTicketBtn');
+    const ticketSubmitMsg      = document.getElementById('ticket-submit-msg');
+
+    // Confirm modal
+    const confirmModal         = document.getElementById('confirm-modal');
+    const confirmTitle         = document.getElementById('confirm-title');
+    const confirmBody          = document.getElementById('confirm-body');
+    const confirmOkBtn         = document.getElementById('confirmOkBtn');
+    const confirmCancelBtn     = document.getElementById('confirmCancelBtn');
+
+    // ═══════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════
+    let currentUser       = null;   // full profile object
+    let currentQuestion   = null;
+    let currentAnswer     = null;
+    let chatHistory       = [];     // { role, content }[]
+    let contextualRoles   = {};
+    let chatActive        = false;
+
+    // ═══════════════════════════════════════════════
+    //  Utilities
+    // ═══════════════════════════════════════════════
+
+    /** Centralised fetch helper — always sends the session cookie */
+    const api = (method = 'GET', body = null) => ({
+        method,
+        headers: body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined)
+    });
+
+    /** Show a toast notification */
+    function toast(msg, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 4200);
+    }
+
+    /** Custom confirm dialog — returns a Promise<boolean> */
+    function confirm(title, body) {
+        return new Promise(resolve => {
+            confirmTitle.textContent = title;
+            confirmBody.textContent  = body;
+            confirmModal.showModal();
+            const cleanup = (result) => {
+                confirmModal.close();
+                confirmOkBtn.removeEventListener('click', ok);
+                confirmCancelBtn.removeEventListener('click', cancel);
+                resolve(result);
+            };
+            const ok     = () => cleanup(true);
+            const cancel = () => cleanup(false);
+            confirmOkBtn.addEventListener('click', ok);
+            confirmCancelBtn.addEventListener('click', cancel);
         });
-        loginSection.classList.remove('hidden');
+    }
+
+    /** Status badge helper for tickets */
+    function badgeFor(status) {
+        const map = {
+            'Open':        'badge-open',
+            'In Progress': 'badge-progress',
+            'Resolved':    'badge-resolved',
+            'Closed':      'badge-closed'
+        };
+        return `<span class="badge ${map[status] || 'badge-closed'}">${status}</span>`;
+    }
+
+    /** Convert textarea height to content height */
+    function autoResize(el) {
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    }
+
+    // ═══════════════════════════════════════════════
+    //  View Management
+    // ═══════════════════════════════════════════════
+
+    function showLogin() {
+        loginView.classList.remove('hidden');
+        chatView.classList.add('hidden');
+        adminView.classList.add('hidden');
+        topbarActions.innerHTML = '';
+        loginError.textContent = '';
     }
 
     function showChat() {
-        loginSection.classList.add('hidden');
-        if (adminDashboardSection) adminDashboardSection.classList.add('hidden');
-        [userProfileControls, chatSection].forEach(el => el.classList.remove('hidden'));
-        postChatActions.classList.add('hidden'); // Keep actions hidden until a chat response is given
+        loginView.classList.add('hidden');
+        chatView.classList.remove('hidden');
+        adminView.classList.add('hidden');
+        buildTopBar();
     }
 
-    function showAdminDashboard() {
-        loginSection.classList.add('hidden');
-        chatSection.classList.add('hidden');
-        postChatActions.classList.add('hidden');
-        adminDashboardSection.classList.remove('hidden');
-        loadAdminPanelData();
-        fetchAdminDocuments();
+    function showAdmin() {
+        loginView.classList.add('hidden');
+        chatView.classList.add('hidden');
+        adminView.classList.remove('hidden');
+        switchAdminPanel('docs-panel');
+        loadAdminConfig();
+        fetchDocs();
     }
 
-    // UPDATED FUNCTION to check the new 'is_admin' flag
-    function updateUIForUserProfile(profile) {
-        currentUserProfile = profile;
-        currentUserEmail = profile.user_email;
-        localStorage.setItem('knowledgeAssistantProfile', JSON.stringify(profile));
-
-        profileEmail.textContent = currentUserEmail;
-        showChat();
-        
-        if (profile.is_admin) { // Check the boolean flag now
-            adminControlsArea.classList.remove('hidden');
-        } else {
-            adminControlsArea.classList.add('hidden');
-        }
+    function buildTopBar() {
+        if (!currentUser) return;
+        const isAdmin = currentUser.is_admin;
+        topbarActions.innerHTML = `
+            <div class="user-chip">
+                <span class="user-dot"></span>
+                <span>${currentUser.user_email}</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="ticketBtn">🎫 Ticket</button>
+            ${isAdmin ? `<button class="btn btn-ghost btn-sm" id="adminBtn" style="color:var(--danger);">⚙️ Admin</button>` : ''}
+            <button class="btn btn-ghost btn-sm" id="logoutBtn">Sign out</button>
+        `;
+        document.getElementById('ticketBtn').addEventListener('click', openTicketModal);
+        document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+        if (isAdmin) document.getElementById('adminBtn').addEventListener('click', showAdmin);
     }
 
-    // UPDATED FUNCTION to populate department checkboxes and upload selects
-    async function loadAdminPanelData() {
+    // ═══════════════════════════════════════════════
+    //  Auth
+    // ═══════════════════════════════════════════════
+
+    async function initApp() {
         try {
-            const response = await fetch('/admin/config_tags', getFetchOptions());
-            if (!response.ok) return;
-            const data = await response.json();
-            
-            targetDepartmentsGroup.innerHTML = '';
-            if (uploadDepartmentTag) uploadDepartmentTag.innerHTML = '';
-
-            if (data.known_department_tags) {
-                data.known_department_tags.forEach(tag => {
-                    // Checkboxes for Permissions
-                    const div = document.createElement('div');
-                    div.className = 'checkbox-item';
-                    const input = document.createElement('input');
-                    input.type = 'checkbox';
-                    input.id = `dept-check-${tag}`;
-                    input.value = tag;
-                    input.name = 'departments';
-                    const label = document.createElement('label');
-                    label.htmlFor = `dept-check-${tag}`;
-                    label.textContent = tag;
-                    div.appendChild(input);
-                    div.appendChild(label);
-                    targetDepartmentsGroup.appendChild(div);
-
-                    // Select Option for Document Upload
-                    if (uploadDepartmentTag) {
-                        const option = document.createElement('option');
-                        option.value = tag;
-                        option.textContent = tag;
-                        uploadDepartmentTag.appendChild(option);
-                    }
-                });
-            } else {
-                targetDepartmentsGroup.innerHTML = '<p>No known departments found.</p>';
-                if (uploadDepartmentTag) uploadDepartmentTag.innerHTML = '<option value="GENERAL">General</option>';
-            }
-
-        } catch (error) { 
-            console.error("Could not load admin config tags:", error); 
-            targetDepartmentsGroup.innerHTML = '<p>Error loading departments.</p>';
-        }
-    }
-    
-    function hideTicketModal() {
-        ticketModal.close();
-        ticketQuestionTextarea.value = ''; ticketSubmissionMessage.textContent = '';
-        teamSuggestionP.textContent = ''; ticketTeamSelect.innerHTML = '';
-    }
-    
-    // --- Append Message & Textarea Resize ---
-    function appendMessage(role, text) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('chat-message', `${role}-message`);
-        if (role === 'user') {
-            messageDiv.textContent = text;
-            chatHistoryDiv.appendChild(messageDiv);
-            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
-            return {};
-        }
-        const contentDiv = document.createElement('div');
-        contentDiv.classList.add('assistant-message-content');
-        contentDiv.innerHTML = text;
-        const sourcesDiv = document.createElement('div');
-        sourcesDiv.classList.add('sources-container', 'hidden');
-        messageDiv.appendChild(contentDiv); messageDiv.appendChild(sourcesDiv);
-        chatHistoryDiv.appendChild(messageDiv);
-        chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
-        return { contentDiv, sourcesDiv };
-    }
-
-    chatInput.addEventListener('input', () => {
-        chatInput.style.height = 'auto';
-        chatInput.style.height = `${Math.min(chatInput.scrollHeight, 450)}px`;
-    });
-
-    // --- Event Listeners ---
-    loginButton.addEventListener('click', async () => {
-        const email = emailInput.value.trim();
-        if (!email) { loginError.textContent = 'Please enter your email.'; return; }
-        loginError.textContent = '';
-        loginButton.disabled = true; loginButton.textContent = 'Logging in...';
-        try {
-            const response = await fetch('/auth/login', getFetchOptions('POST', { email }));
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Login failed');
-            
+            const res  = await fetch('/auth/me', api('POST'));
+            if (!res.ok) throw new Error('No session');
+            const data = await res.json();
             if (data.user_profile) {
-                updateUIForUserProfile(data.user_profile);
-                emailInput.value = '';
+                currentUser = data.user_profile;
+                showChat();
             } else {
-                throw new Error('Login response was missing user profile details.');
+                throw new Error('Missing profile');
             }
-        } catch (error) {
-            console.error('Login error:', error);
-            loginError.textContent = error.message;
-            currentUserEmail = null; currentUserProfile = null;
-            localStorage.removeItem('knowledgeAssistantProfile');
-        } finally {
-            loginButton.disabled = false; loginButton.textContent = 'Login';
-        }
-    });
-
-    logoutButton.addEventListener('click', async () => {
-        try {
-            await fetch('/auth/logout', getFetchOptions('POST'));
-        } catch (error) {
-            console.error("Logout failed, but clearing client-side state anyway:", error);
-        } finally {
-            localStorage.removeItem('knowledgeAssistantProfile');
-            chatSection.classList.remove('chat-active');
-            currentUserEmail = null; currentUserProfile = null;
-            currentQuestion = null; currentAnswer = null; chatHistory = [];
-            contextualRolesObject = {};
-            chatHistoryDiv.innerHTML = ''; profileEmail.textContent = '';
-            adminPermissionsForm.reset(); contextualRolesPreview.textContent = '{}';
+        } catch {
             showLogin();
         }
+    }
+
+    loginButton.addEventListener('click', async () => {
+        const email = emailInput.value.trim();
+        if (!email) { loginError.textContent = 'Please enter your work email.'; return; }
+        loginError.textContent = '';
+        loginButton.disabled = true;
+        loginButton.textContent = 'Signing in…';
+        try {
+            const res  = await fetch('/auth/login', api('POST', { email }));
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Login failed');
+            if (!data.user_profile) throw new Error('Incomplete login response');
+            currentUser = data.user_profile;
+            emailInput.value = '';
+            showChat();
+        } catch (e) {
+            loginError.textContent = e.message;
+        } finally {
+            loginButton.disabled = false;
+            loginButton.textContent = 'Sign In';
+        }
     });
 
+    emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginButton.click(); });
+
+    async function handleLogout() {
+        try { await fetch('/auth/logout', api('POST')); } catch { /* always clear client */ }
+        currentUser = null; currentQuestion = null; currentAnswer = null;
+        chatHistory = []; chatActive = false;
+        chatMessages.innerHTML = '';
+        chatMessages.appendChild(welcomeSplash);
+        welcomeSplash.classList.remove('hidden');
+        postChatBar.classList.add('hidden');
+        showLogin();
+    }
+
+    // ═══════════════════════════════════════════════
+    //  Chat
+    // ═══════════════════════════════════════════════
+
+    function createUserMessage(text) {
+        const initials = (currentUser?.user_email?.[0] || 'U').toUpperCase();
+        const div = document.createElement('div');
+        div.className = 'msg msg-user';
+        div.innerHTML = `
+            <div class="msg-avatar">${initials}</div>
+            <div class="msg-body">
+                <div class="msg-bubble">${escapeHtml(text)}</div>
+            </div>`;
+        return div;
+    }
+
+    function createAIMessage() {
+        const div = document.createElement('div');
+        div.className = 'msg msg-ai';
+        div.innerHTML = `
+            <div class="msg-avatar">AI</div>
+            <div class="msg-body">
+                <div class="msg-bubble" id="ai-bubble-active">
+                    <div class="typing-indicator"><span></span><span></span><span></span></div>
+                </div>
+                <div class="msg-meta hidden" id="ai-meta-active"></div>
+            </div>`;
+        return div;
+    }
+
+    function escapeHtml(text) {
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderMarkdown(raw) {
+        try { return marked.parse(raw); } catch { return escapeHtml(raw); }
+    }
+
     const handleSend = async () => {
-        chatSection.classList.add('chat-active');
         const prompt = chatInput.value.trim();
-        if (!prompt || !currentUserEmail) return;
-        appendMessage('user', prompt);
+        if (!prompt || !currentUser) return;
+
+        // Activate chat view
+        if (!chatActive) {
+            chatActive = true;
+            welcomeSplash.classList.add('hidden');
+        }
+        postChatBar.classList.add('hidden');
+        feedbackMessage.textContent = '';
+
+        // User message
+        const userEl = createUserMessage(prompt);
+        chatMessages.appendChild(userEl);
         chatHistory.push({ role: 'user', content: prompt });
+        if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40); // cap at 20 exchanges
         currentQuestion = prompt;
-        chatInput.value = ''; chatInput.style.height = 'auto';
-        postChatActions.classList.add('hidden'); // Hide actions while waiting for new response
-        chatInput.disabled = true; sendChatButton.disabled = true; sendChatButton.textContent = '...';
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+
+        // AI placeholder
+        const aiEl = createAIMessage();
+        chatMessages.appendChild(aiEl);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        const bubble = document.getElementById('ai-bubble-active');
+        const meta   = document.getElementById('ai-meta-active');
+        bubble.id    = '';
+        meta.id      = '';
+
+        // Disable input
+        chatInput.disabled = true;
+        sendChatButton.disabled = true;
+
+        let accum = '';
         try {
-            const response = await fetch('/rag/chat', getFetchOptions('POST', { prompt: prompt, chat_history: chatHistory.slice(-8) }));
-            if (!response.ok || !response.body) { const errData = await response.json(); throw new Error(errData.detail || 'Failed to get a valid response from the server.'); }
-            const { contentDiv, sourcesDiv } = appendMessage('assistant', '...');
-            currentAnswer = '';
-            const reader = response.body.getReader();
+            const res = await fetch('/rag/chat', api('POST', {
+                prompt,
+                chat_history: chatHistory.slice(-16)
+            }));
+
+            if (!res.ok || !res.body) {
+                const err = await res.json().catch(() => ({}));
+                throw Object.assign(new Error(err.detail || 'Server error'), { type: 'server' });
+            }
+
+            const reader  = res.body.getReader();
             const decoder = new TextDecoder();
-            let buffer = '';
+            let   buf     = '';
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const events = buffer.split('\n\n');
-                buffer = events.pop();
-                for (const event of events) {
-                    if (event.startsWith('data: ')) {
-                        try {
-                            const jsonData = JSON.parse(event.substring(6));
-                            if (jsonData.answer_chunk) {
-                                if (contentDiv.textContent === '...') contentDiv.textContent = '';
-                                currentAnswer += jsonData.answer_chunk;
-                                contentDiv.innerHTML = marked.parse(currentAnswer + ' ▌');
-                            }
-                            if (jsonData.sources) {
-                                sourcesDiv.classList.remove('hidden');
-                                const sourceList = jsonData.sources.map(source => `<li class="source-item">${source}</li>`).join('');
-                                sourcesDiv.innerHTML = `<strong>Sources:</strong><ul>${sourceList}</ul>`;
-                            }
-                            if (jsonData.error) { contentDiv.innerHTML = `<p class="error-message">Error: ${jsonData.error}</p>`; }
-                        } catch (e) { console.warn("Could not parse JSON from stream event:", event, e); }
-                    }
+                buf += decoder.decode(value, { stream: true });
+                const parts = buf.split('\n\n');
+                buf = parts.pop();
+                for (const part of parts) {
+                    if (!part.startsWith('data: ')) continue;
+                    try {
+                        const json = JSON.parse(part.slice(6));
+                        if (json.answer_chunk) {
+                            accum += json.answer_chunk;
+                            bubble.innerHTML = renderMarkdown(accum) + '<span class="cursor-blink">▌</span>';
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                        if (json.sources && json.sources.length > 0) {
+                            const pills = json.sources.map(s => `<span class="source-pill">${escapeHtml(s)}</span>`).join('');
+                            meta.classList.remove('hidden');
+                            meta.innerHTML = `
+                                <button class="copy-btn" title="Copy answer" data-answer="">📋 Copy</button>
+                                <div class="sources"><span class="sources-label">Sources:</span>${pills}</div>`;
+                            meta.querySelector('.copy-btn').dataset.answer = accum;
+                            meta.querySelector('.copy-btn').addEventListener('click', handleCopyClick);
+                        }
+                        if (json.error) {
+                            bubble.innerHTML = `<span class="text-danger">⚠ ${escapeHtml(json.error)}</span>`;
+                        }
+                    } catch { /* malformed event, skip */ }
                 }
-                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
             }
-            contentDiv.innerHTML = marked.parse(currentAnswer);
-            if (contentDiv.textContent === '...') { contentDiv.textContent = "I'm sorry, but I couldn't find a relevant answer in the documents available to me."; }
-            chatHistory.push({ role: 'assistant', content: currentAnswer });
-            postChatActions.classList.remove('hidden'); // Show actions now
-            feedbackButtonsDiv.classList.remove('hidden');
-            feedbackMessage.textContent = '';
-        } catch (error) {
-            console.error('Chat error:', error);
-            const { contentDiv } = appendMessage('assistant', `An error occurred: ${error.message}`);
-            if (contentDiv) contentDiv.classList.add('error-message');
+
+            // Finalise
+            if (accum) {
+                bubble.innerHTML = renderMarkdown(accum);
+                // Ensure copy button references final answer
+                const copyBtn = meta.querySelector('.copy-btn');
+                if (copyBtn) copyBtn.dataset.answer = accum;
+            } else if (bubble.querySelector('.typing-indicator')) {
+                // No content arrived — LLM found no relevant docs
+                bubble.innerHTML = `<span class="text-muted">ℹ I couldn't find a relevant answer in the documents available to you.</span>`;
+            }
+
+            currentAnswer = accum;
+            chatHistory.push({ role: 'assistant', content: accum });
+            postChatBar.classList.remove('hidden');
+
+        } catch (err) {
+            const isNoDoc = err.message?.toLowerCase().includes('no relevant');
+            bubble.innerHTML = isNoDoc
+                ? `<span class="text-muted">ℹ I couldn't find a relevant answer in the documents available to you.</span>`
+                : `<span class="text-danger">⚠ ${escapeHtml(err.message || 'An unexpected error occurred.')}</span>`;
             currentAnswer = null;
         } finally {
-            chatInput.disabled = false; sendChatButton.disabled = false; sendChatButton.textContent = 'Send';
+            chatInput.disabled = false;
+            sendChatButton.disabled = false;
+            chatInput.focus();
         }
     };
 
     sendChatButton.addEventListener('click', handleSend);
-    chatInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); } });
+    chatInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    });
+    chatInput.addEventListener('input', () => autoResize(chatInput));
 
-    async function handleFeedback(feedbackType) {
-        if (!currentQuestion || !currentAnswer || !currentUserEmail) return;
-        feedbackMessage.textContent = ''; feedbackMessage.className = 'success-message';
-        try {
-            const response = await fetch('/feedback/record', getFetchOptions('POST', { question: currentQuestion, answer: currentAnswer, feedback_type: feedbackType }));
-            if (!response.ok) throw new Error('Could not submit feedback.');
-            feedbackMessage.textContent = 'Thank you!';
-            feedbackButtonsDiv.classList.add('hidden');
-        } catch (error) { feedbackMessage.textContent = `Error: ${error.message}`; feedbackMessage.className = 'error-message'; }
+    newChatButton.addEventListener('click', () => {
+        chatHistory = [];
+        chatActive  = false;
+        currentQuestion = null;
+        currentAnswer   = null;
+        chatMessages.innerHTML = '';
+        chatMessages.appendChild(welcomeSplash);
+        welcomeSplash.classList.remove('hidden');
+        postChatBar.classList.add('hidden');
+        feedbackMessage.textContent = '';
+    });
+
+    function handleCopyClick(e) {
+        const btn = e.currentTarget;
+        const text = btn.dataset.answer;
+        navigator.clipboard.writeText(text).then(() => {
+            btn.textContent = '✓ Copied';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = '📋 Copy'; btn.classList.remove('copied'); }, 2000);
+        });
     }
-    helpfulButton.addEventListener('click', () => handleFeedback('👍'));
-    notHelpfulButton.addEventListener('click', () => handleFeedback('👎'));
 
-    // --- Admin Panel Logic ---
-    async function fetchAndDisplayTickets() {
-        ticketsTableBody.innerHTML = ''; ticketsTableContainer.classList.add('hidden');
-        ticketsLoadingMessage.textContent = 'Loading tickets...'; ticketsLoadingMessage.className = '';
-        ticketsLoadingMessage.classList.remove('hidden');
+    // ═══════════════════════════════════════════════
+    //  Feedback
+    // ═══════════════════════════════════════════════
+
+    async function submitFeedback(type) {
+        if (!currentQuestion || !currentAnswer) return;
         try {
-            const response = await fetch('/admin/recent_tickets', getFetchOptions());
-            const tickets = await response.json();
-            if (!response.ok) { throw new Error(tickets.detail || 'Failed to fetch tickets.'); }
-            if (tickets.length === 0) { ticketsLoadingMessage.textContent = 'No recent tickets found.'; return; }
-            tickets.forEach(ticket => {
-                const row = document.createElement('tr');
-                const timestamp = new Date(ticket.timestamp).toLocaleString();
-                row.innerHTML = `<td>${timestamp}</td><td>${ticket.user_email}</td><td class="ticket-question">${ticket.question}</td><td>${ticket.selected_team}</td><td>${ticket.status}</td>`;
-                ticketsTableBody.appendChild(row);
+            const res = await fetch('/feedback/record', api('POST', {
+                question: currentQuestion,
+                answer: currentAnswer,
+                feedback_type: type
+            }));
+            if (!res.ok) throw new Error('Failed');
+            feedbackMessage.textContent = 'Thanks for your feedback!';
+            feedbackMessage.className   = 'text-success';
+            helpfulButton.disabled    = true;
+            notHelpfulButton.disabled = true;
+        } catch {
+            feedbackMessage.textContent = 'Could not record feedback.';
+            feedbackMessage.className   = 'text-danger';
+        }
+    }
+
+    helpfulButton.addEventListener('click',    () => submitFeedback('👍'));
+    notHelpfulButton.addEventListener('click', () => submitFeedback('👎'));
+
+    // ═══════════════════════════════════════════════
+    //  Ticket Modal
+    // ═══════════════════════════════════════════════
+
+    function openTicketModal() {
+        ticketQuestion.value        = currentQuestion || '';
+        ticketSubmitMsg.textContent = '';
+        teamSuggestion.textContent  = '';
+        ticketTeam.innerHTML        = '<option value="">Type your issue for a suggestion</option>';
+        ticketModal.showModal();
+        if (ticketQuestion.value) ticketQuestion.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    cancelTicketBtn.addEventListener('click', () => { ticketModal.close(); });
+
+    let teamSuggestTimeout;
+    ticketQuestion.addEventListener('input', () => {
+        clearTimeout(teamSuggestTimeout);
+        const text = ticketQuestion.value.trim();
+        if (!text) { ticketTeam.innerHTML = '<option value="">Type your issue for a suggestion</option>'; return; }
+        ticketTeam.innerHTML = '<option value="">Loading…</option>';
+        teamSuggestTimeout = setTimeout(async () => {
+            try {
+                const res  = await fetch('/tickets/suggest_team', api('POST', { question_text: text }));
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Failed');
+                ticketTeam.innerHTML = '';
+                (data.available_teams || []).forEach(team => {
+                    const opt = document.createElement('option');
+                    opt.value = team; opt.textContent = team;
+                    if (team === data.suggested_team) opt.selected = true;
+                    ticketTeam.appendChild(opt);
+                });
+                teamSuggestion.textContent = data.suggested_team ? `Suggested: ${data.suggested_team}` : '';
+            } catch (e) {
+                teamSuggestion.textContent = `Error: ${e.message}`;
+            }
+        }, 500);
+    });
+
+    submitTicketBtn.addEventListener('click', async () => {
+        const question_text  = ticketQuestion.value.trim();
+        const selected_team  = ticketTeam.value;
+        ticketSubmitMsg.textContent = '';
+        if (!question_text || !selected_team) {
+            ticketSubmitMsg.textContent = 'Please fill in the question and select a team.';
+            ticketSubmitMsg.className   = 'text-danger';
+            return;
+        }
+        try {
+            const res  = await fetch('/tickets/create', api('POST', {
+                question_text,
+                selected_team,
+                chat_history: chatHistory.slice(-5)
+            }));
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Failed');
+            ticketSubmitMsg.textContent = '✓ Ticket created successfully!';
+            ticketSubmitMsg.className   = 'text-success';
+            setTimeout(() => ticketModal.close(), 1800);
+        } catch (e) {
+            ticketSubmitMsg.textContent = e.message;
+            ticketSubmitMsg.className   = 'text-danger';
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    //  Admin: Navigation
+    // ═══════════════════════════════════════════════
+
+    closeAdminBtn.addEventListener('click', showChat);
+
+    function switchAdminPanel(panelId) {
+        adminNavBtns.forEach(b => b.classList.toggle('active', b.dataset.panel === panelId));
+        adminPanels.forEach(p => {
+            const show = p.id === panelId;
+            p.classList.toggle('active', show);
+            p.style.display = show ? '' : 'none';
+        });
+        if (panelId === 'tickets-panel') fetchTickets();
+    }
+
+    adminNavBtns.forEach(btn => {
+        btn.addEventListener('click', () => switchAdminPanel(btn.dataset.panel));
+    });
+
+    // ═══════════════════════════════════════════════
+    //  Admin: Config Tags (departments)
+    // ═══════════════════════════════════════════════
+
+    async function loadAdminConfig() {
+        try {
+            const res  = await fetch('/admin/config_tags', api());
+            if (!res.ok) return;
+            const data = await res.json();
+            const tags = data.known_department_tags || [];
+
+            // Populate upload select
+            uploadDept.innerHTML = tags.map(t => `<option value="${t}">${t}</option>`).join('');
+
+            // Populate manage-perms checkboxes
+            deptCheckboxes.innerHTML = tags.map(t => `
+                <label class="check-item">
+                    <input type="checkbox" name="departments" value="${t}">
+                    <span>${t}</span>
+                </label>`).join('');
+        } catch { /* non-fatal */ }
+    }
+
+    // ═══════════════════════════════════════════════
+    //  Admin: Documents
+    // ═══════════════════════════════════════════════
+
+    refreshDocsBtn.addEventListener('click', fetchDocs);
+
+    async function fetchDocs() {
+        docsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--text-muted)">Loading…</td></tr>';
+        try {
+            const res  = await fetch('/admin/documents', api());
+            if (!res.ok) throw new Error('Failed to fetch documents');
+            const data = await res.json();
+            const docs = data.documents || [];
+            if (docs.length === 0) {
+                docsTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--text-muted)">No documents indexed yet.</td></tr>';
+                return;
+            }
+            docsTableBody.innerHTML = docs.map(doc => {
+                const kb   = (doc.size / 1024).toFixed(1);
+                const date = new Date(doc.last_modified).toLocaleDateString();
+                return `<tr>
+                    <td>${escapeHtml(doc.filename)}</td>
+                    <td>${kb} KB</td>
+                    <td>${date}</td>
+                    <td style="text-align:right">
+                        <button class="btn btn-danger btn-sm" data-filename="${escapeHtml(doc.filename)}">Delete</button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            docsTableBody.querySelectorAll('[data-filename]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const filename = btn.dataset.filename;
+                    const ok = await confirm('Delete Document', `Permanently delete "${filename}"? This will also remove its vectors from Pinecone.`);
+                    if (!ok) return;
+                    try {
+                        const res = await fetch(`/admin/documents/${encodeURIComponent(filename)}`, api('DELETE'));
+                        if (!res.ok) throw new Error('Delete failed');
+                        toast(`"${filename}" deleted`, 'success');
+                        fetchDocs();
+                    } catch (e) {
+                        toast(e.message, 'error');
+                    }
+                });
             });
-            ticketsLoadingMessage.classList.add('hidden'); ticketsTableContainer.classList.remove('hidden');
-        } catch (error) { ticketsLoadingMessage.textContent = `Error: ${error.message}`; ticketsLoadingMessage.className = 'error-message'; }
-    }
-
-    function clearAdminMessages() {
-        if(adminViewPermissionsMessage) {
-            adminViewPermissionsMessage.textContent = '';
-            adminViewPermissionsMessage.className = '';
-        }
-        if(adminPermissionsMessage) {
-            adminPermissionsMessage.textContent = '';
-            adminPermissionsMessage.className = 'error-message';
-        }
-        if(adminRemoveUserMessage) {
-            adminRemoveUserMessage.textContent = '';
-            adminRemoveUserMessage.className = 'error-message';
-        }
-        if(userPermissionsDisplayDiv) {
-            userPermissionsDisplayDiv.classList.add('hidden');
-        }
-    }
-
-    if (openAdminDashboardButton) {
-        openAdminDashboardButton.addEventListener('click', showAdminDashboard);
-    }
-    if (closeAdminDashboardButton) {
-        closeAdminDashboardButton.addEventListener('click', () => {
-            clearAdminMessages();
-            showChat();
-        });
-    }
-
-    function updateActivePanel(targetPanelId) {
-        adminNavButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.panel === targetPanelId));
-        adminPanels.forEach(panel => {
-            if (panel.id === targetPanelId) {
-                panel.classList.remove('hidden');
-                panel.classList.add('active');
-            } else {
-                panel.classList.add('hidden');
-                panel.classList.remove('active');
-            }
-        });
-        if (targetPanelId === 'view-tickets-panel') { fetchAndDisplayTickets(); }
-    }
-
-    adminNavButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            updateActivePanel(button.dataset.panel);
-        });
-    });
-
-    addRoleButton.addEventListener('click', () => {
-        const context = roleContextTagInput.value.trim().toUpperCase(); const role = roleNameTagInput.value.trim().toUpperCase();
-        if (!context || !role) { alert('Both Context and Role Name must be filled.'); return; }
-        if (!contextualRolesObject[context]) { contextualRolesObject[context] = []; }
-        if (!contextualRolesObject[context].includes(role)) { contextualRolesObject[context].push(role); }
-        contextualRolesPreview.textContent = JSON.stringify(contextualRolesObject, null, 2);
-        roleContextTagInput.value = ''; roleNameTagInput.value = ''; roleContextTagInput.focus();
-    });
-
-    // --- UPDATED: 'submit' event listener for the new admin form ---
-    adminPermissionsForm.addEventListener('submit', async (event) => {
-        clearAdminMessages();
-        event.preventDefault();
-        adminPermissionsMessage.textContent = ''; adminPermissionsMessage.className = 'error-message';
-        const targetEmail = targetUserEmailInput.value.trim();
-        if (!targetEmail) { adminPermissionsMessage.textContent = 'Target User Email is required.'; return; }
-        
-        // --- UPDATED: Logic to gather data from new form controls ---
-        const permissions = {};
-        const hierarchyLevel = targetHierarchyLevelInput.value;
-        if (hierarchyLevel !== '') {
-            permissions.user_hierarchy_level = parseInt(hierarchyLevel, 10);
-        }
-        
-        // Always include the is_admin flag
-        permissions.is_admin = targetIsAdminInput.checked;
-    
-        // Gather from checkboxes. We'll always send the array, even if it's empty,
-        // to allow admins to remove all departments from a user.
-        const selectedDepartmentNodes = targetDepartmentsGroup.querySelectorAll('input[name="departments"]:checked');
-        permissions.departments = Array.from(selectedDepartmentNodes).map(node => node.value);
-        
-        const projectsStr = targetProjectsInput.value.trim();
-        if (projectsStr !== '') {
-            permissions.projects_membership = projectsStr.split(',').map(p => p.trim().toUpperCase()).filter(Boolean);
-        } else {
-            permissions.projects_membership = []; // Send empty array to clear projects
-        }
-    
-        if (Object.keys(contextualRolesObject).length > 0) {
-            permissions.contextual_roles = contextualRolesObject;
-        }
-        // --- End of updated data gathering block ---
-
-        if (Object.keys(permissions).length === 0) { adminPermissionsMessage.textContent = 'No changes detected. Please fill in at least one field to update.'; return; }
-        
-        try {
-            const response = await fetch('/admin/user_permissions', getFetchOptions('POST', { target_email: targetEmail, permissions }));
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to update permissions.');
-            adminPermissionsMessage.textContent = data.message || 'Permissions updated successfully!';
-            adminPermissionsMessage.className = 'success-message';
-            adminPermissionsForm.reset(); contextualRolesObject = {}; contextualRolesPreview.textContent = '{}';
-            if (data.updated_profile) { adminPermissionsMessage.innerHTML += `<br>Updated Profile: <pre>${JSON.stringify(data.updated_profile, null, 2)}</pre>`; }
-        } catch (error) { adminPermissionsMessage.textContent = `Error: ${error.message}`; }
-    });
-
-    viewPermissionsButton.addEventListener('click', async () => {
-        clearAdminMessages();
-        adminViewPermissionsMessage.textContent = ''; adminViewPermissionsMessage.className = 'error-message';
-        userPermissionsDisplayDiv.classList.add('hidden');
-        const targetEmailToView = viewTargetUserEmailInput.value.trim();
-        if (!targetEmailToView) { adminViewPermissionsMessage.textContent = 'User Email to view is required.'; return; }
-        try {
-            const response = await fetch(`/admin/view_user_permissions/${encodeURIComponent(targetEmailToView)}`, getFetchOptions());
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to fetch permissions.');
-            adminViewPermissionsMessage.textContent = 'Permissions fetched successfully.'; adminViewPermissionsMessage.className = 'success-message';
-            displayUserEmailSpan.textContent = data.user_email || targetEmailToView;
-            displayUserPermissionsJsonPre.textContent = JSON.stringify(data, null, 2);
-            userPermissionsDisplayDiv.classList.remove('hidden');
-        } catch (error) { adminViewPermissionsMessage.textContent = `Error: ${error.message}`; }
-    });
-
-    removeUserButton.addEventListener('click', async () => {
-        clearAdminMessages();
-        adminRemoveUserMessage.textContent = ''; adminRemoveUserMessage.className = 'error-message';
-        const targetEmailToRemove = removeTargetUserEmailInput.value.trim();
-        if (!targetEmailToRemove) { adminRemoveUserMessage.textContent = 'User Email to remove is required.'; return; }
-        if (!confirm(`Are you sure you want to remove the user '${targetEmailToRemove}'? This action cannot be undone.`)) { return; }
-        try {
-            const response = await fetch('/admin/remove_user', getFetchOptions('POST', { target_email: targetEmailToRemove }));
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to remove user.');
-            adminRemoveUserMessage.textContent = data.message || 'User removed successfully!';
-            adminRemoveUserMessage.className = 'success-message';
-            removeTargetUserEmailInput.value = '';
-        } catch (error) { adminRemoveUserMessage.textContent = `Error: ${error.message}`; }
-    });
-
-    // --- Document Admin Logic ---
-    if (refreshDocsButton) {
-        refreshDocsButton.addEventListener('click', fetchAdminDocuments);
-    }
-
-    async function fetchAdminDocuments() {
-        adminDocsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #888;">Loading documents...</td></tr>';
-        try {
-            const response = await fetch('/admin/documents', getFetchOptions('GET'));
-            if (!response.ok) throw new Error('Failed to fetch documents.');
-            const data = await response.json();
-            adminDocsTableBody.innerHTML = '';
-            if (data.documents && data.documents.length > 0) {
-                data.documents.forEach(doc => {
-                    const row = document.createElement('tr');
-                    row.style.borderBottom = '1px solid #333';
-                    const sizeKB = (doc.size / 1024).toFixed(2);
-                    const modifiedDate = new Date(doc.last_modified).toLocaleString();
-                    row.innerHTML = `
-                        <td style="padding: 8px;">${doc.filename}</td>
-                        <td style="padding: 8px;">${sizeKB} KB</td>
-                        <td style="padding: 8px;">${modifiedDate}</td>
-                        <td style="padding: 8px; text-align: right;">
-                            <button class="delete-doc-btn btn-danger" data-filename="${doc.filename}" style="padding: 4px 8px; font-size: 0.8em;">Delete</button>
-                        </td>
-                    `;
-                    adminDocsTableBody.appendChild(row);
-                });
-
-                document.querySelectorAll('.delete-doc-btn').forEach(btn => {
-                    btn.addEventListener('click', async (e) => {
-                        const filename = e.target.getAttribute('data-filename');
-                        if (confirm(`Are you sure you want to permanently delete '${filename}'? This will remove the document and its vectors.`)) {
-                            await deleteAdminDocument(filename);
-                        }
-                    });
-                });
-            } else {
-                adminDocsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #888;">No documents found.</td></tr>';
-            }
-        } catch (error) {
-            adminDocsTableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger-color);">${error.message}</td></tr>`;
-        }
-    }
-
-    async function deleteAdminDocument(filename) {
-        try {
-            const response = await fetch(`/admin/documents/${encodeURIComponent(filename)}`, getFetchOptions('DELETE'));
-            if (!response.ok) throw new Error('Failed to delete document.');
-            fetchAdminDocuments();
-        } catch (error) {
-            alert(`Error generating delete request: ${error.message}`);
+        } catch (e) {
+            docsTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--danger);padding:1.5rem;">${escapeHtml(e.message)}</td></tr>`;
         }
     }
 
     async function uploadDocument(file) {
         if (!file) return;
-        uploadStatusMessage.textContent = 'Uploading and indexing...';
-        uploadStatusMessage.style.color = 'var(--primary-color)';
+        uploadStatus.textContent = '⬆ Uploading…';
+        uploadStatus.className   = 'text-muted';
         const formData = new FormData();
         formData.append('file', file);
-        if (uploadDepartmentTag) formData.append('department', uploadDepartmentTag.value);
-        if (uploadHierarchyLevel) formData.append('hierarchy_level', uploadHierarchyLevel.value);
+        formData.append('department', uploadDept.value || 'GENERAL');
+        formData.append('hierarchy_level', uploadLevel.value || '0');
+        try {
+            const res = await fetch('/admin/documents', { method: 'POST', body: formData, credentials: 'include' });
+            if (!res.ok) throw new Error('Upload failed');
+            uploadStatus.textContent = '✓ Uploaded — sync started in background';
+            uploadStatus.className   = 'text-success';
+            toast('Document uploaded and sync started', 'success');
+            setTimeout(() => { uploadStatus.textContent = ''; }, 4000);
+            fetchDocs();
+        } catch (e) {
+            uploadStatus.textContent = `✗ ${e.message}`;
+            uploadStatus.className   = 'text-danger';
+        }
+    }
+
+    // Dropzone events
+    dropzone.addEventListener('click', () => docFileInput.click());
+    dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') docFileInput.click(); });
+    docFileInput.addEventListener('change', e => {
+        if (e.target.files.length) uploadDocument(e.target.files[0]);
+        e.target.value = '';
+    });
+    dropzone.addEventListener('dragover',  e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+    dropzone.addEventListener('dragleave', e => { e.preventDefault(); dropzone.classList.remove('drag-over'); });
+    dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length) uploadDocument(e.dataTransfer.files[0]);
+    });
+
+    // ═══════════════════════════════════════════════
+    //  Admin: Tickets
+    // ═══════════════════════════════════════════════
+
+    async function fetchTickets() {
+        ticketsStatus.textContent = 'Loading tickets…';
+        ticketsStatus.className   = 'text-muted';
+        ticketsContainer.classList.add('hidden');
 
         try {
-            const response = await fetch('/admin/documents', {
-                method: 'POST',
-                // Explicitly omitted Content-Type so browser sets correct multipart/form-data boundary
-                body: formData,
-                credentials: 'include'
+            const res     = await fetch('/admin/recent_tickets', api());
+            const tickets = await res.json();
+            if (!res.ok) throw new Error(tickets.detail || 'Failed to fetch tickets');
+
+            if (tickets.length === 0) {
+                ticketsStatus.textContent = 'No tickets found.';
+                return;
+            }
+
+            ticketsStatus.classList.add('hidden');
+            ticketsContainer.classList.remove('hidden');
+
+            ticketsTbody.innerHTML = tickets.map(t => {
+                const ts = new Date(t.timestamp).toLocaleString();
+                return `
+                <tr class="ticket-row" data-ticket-id="${t.id}" data-user-email="${escapeHtml(t.user_email)}" data-question="${escapeHtml(t.question)}">
+                    <td>#${t.id}</td>
+                    <td style="white-space:nowrap">${ts}</td>
+                    <td>${escapeHtml(t.user_email)}</td>
+                    <td class="td-wrap">${escapeHtml(t.question)}</td>
+                    <td>${escapeHtml(t.selected_team)}</td>
+                    <td class="badge-cell">${badgeFor(t.status)}</td>
+                    <td>
+                        <select class="ticket-status-select" style="width:120px;padding:.3rem .5rem;font-size:.8rem;" data-ticket-id="${t.id}">
+                            <option value="Open"        ${t.status==='Open'        ? 'selected' : ''}>Open</option>
+                            <option value="In Progress" ${t.status==='In Progress' ? 'selected' : ''}>In Progress</option>
+                            <option value="Resolved"    ${t.status==='Resolved'    ? 'selected' : ''}>Resolved</option>
+                            <option value="Closed"      ${t.status==='Closed'      ? 'selected' : ''}>Closed</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="btn btn-ghost btn-sm reply-toggle-btn" data-ticket-id="${t.id}">✉ Reply</button>
+                    </td>
+                </tr>
+                <tr class="reply-panel-row hidden" id="reply-panel-${t.id}">
+                    <td colspan="9" style="background:var(--surface-2);padding:1rem 1.5rem;border-bottom:2px solid var(--border);">
+                        <div style="max-width:680px;">
+                            <div class="reply-history" id="reply-history-${t.id}" style="margin-bottom:.75rem;display:flex;flex-direction:column;gap:.5rem;"></div>
+                            <label style="font-size:.8rem;color:var(--text-muted);margin-bottom:.35rem;display:block;">
+                                Reply to <strong>${escapeHtml(t.user_email)}</strong>
+                                <span style="font-weight:400;color:var(--text-dim);"> — will be sent as email and continue the ticket thread</span>
+                            </label>
+                            <textarea id="reply-text-${t.id}" rows="3"
+                                style="width:100%;resize:vertical;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.875rem;margin-bottom:.5rem;"
+                                placeholder="Type your reply…"></textarea>
+                            <div style="display:flex;gap:.5rem;align-items:center;">
+                                <button class="btn btn-primary btn-sm send-reply-btn" data-ticket-id="${t.id}" data-user-email="${escapeHtml(t.user_email)}">Send Reply</button>
+                                <button class="btn btn-ghost btn-sm close-reply-btn" data-ticket-id="${t.id}">Cancel</button>
+                                <span class="reply-status-${t.id}" style="font-size:.8rem;margin-left:.25rem;"></span>
+                            </div>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            // ── Status update ──
+            ticketsTbody.querySelectorAll('.ticket-status-select').forEach(sel => {
+                sel.addEventListener('change', async () => {
+                    const id     = sel.dataset.ticketId;
+                    const status = sel.value;
+                    try {
+                        const res = await fetch(`/admin/tickets/${id}`, api('PATCH', { status }));
+                        if (!res.ok) throw new Error('Update failed');
+                        sel.closest('tr').querySelector('.badge-cell').innerHTML = badgeFor(status);
+                        toast(`Ticket #${id} → ${status}`, 'success');
+                    } catch (e) {
+                        toast(e.message, 'error');
+                        fetchTickets();
+                    }
+                });
             });
-            if (!response.ok) throw new Error('Upload failed.');
-            uploadStatusMessage.textContent = 'Upload successful! Sync started in background.';
-            uploadStatusMessage.style.color = '#198754';
-            setTimeout(() => { uploadStatusMessage.textContent = ''; }, 3000);
-            fetchAdminDocuments();
-        } catch (error) {
-            uploadStatusMessage.textContent = `Error: ${error.message}`;
-            uploadStatusMessage.style.color = 'var(--danger-color)';
+
+            // ── Toggle reply panel ──
+            ticketsTbody.querySelectorAll('.reply-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id    = btn.dataset.ticketId;
+                    const panel = document.getElementById(`reply-panel-${id}`);
+                    const open  = !panel.classList.contains('hidden');
+                    if (open) {
+                        panel.classList.add('hidden');
+                        btn.textContent = '✉ Reply';
+                    } else {
+                        panel.classList.remove('hidden');
+                        btn.textContent = '▲ Hide';
+                        loadReplyHistory(id);
+                        document.getElementById(`reply-text-${id}`)?.focus();
+                    }
+                });
+            });
+
+            // ── Close reply panel ──
+            ticketsTbody.querySelectorAll('.close-reply-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const panel = document.getElementById(`reply-panel-${btn.dataset.ticketId}`);
+                    panel?.classList.add('hidden');
+                    ticketsTbody.querySelector(`.reply-toggle-btn[data-ticket-id="${btn.dataset.ticketId}"]`).textContent = '✉ Reply';
+                });
+            });
+
+            // ── Send reply ──
+            ticketsTbody.querySelectorAll('.send-reply-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id         = btn.dataset.ticketId;
+                    const userEmail  = btn.dataset.userEmail;
+                    const textarea   = document.getElementById(`reply-text-${id}`);
+                    const statusSpan = document.querySelector(`.reply-status-${id}`);
+                    const text = textarea?.value.trim();
+                    if (!text) { statusSpan.textContent = 'Reply cannot be empty.'; statusSpan.className = `reply-status-${id} text-danger`; return; }
+
+                    btn.disabled = true;
+                    statusSpan.textContent = 'Sending…';
+                    statusSpan.className   = `reply-status-${id} text-muted`;
+
+                    try {
+                        const res  = await fetch(`/admin/tickets/${id}/reply`, api('POST', { reply_text: text }));
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.detail || 'Failed');
+
+                        textarea.value = '';
+                        if (data.email_sent) {
+                            statusSpan.textContent = `✓ Sent to ${userEmail}`;
+                            statusSpan.className   = `reply-status-${id} text-success`;
+                            toast(`Reply sent to ${userEmail}`, 'success');
+                        } else {
+                            statusSpan.textContent = '⚠ Saved but email not sent — check SMTP config';
+                            statusSpan.className   = `reply-status-${id} text-danger`;
+                            toast('Reply saved but email failed — check SMTP settings', 'error');
+                        }
+                        loadReplyHistory(id);
+                    } catch (e) {
+                        statusSpan.textContent = e.message;
+                        statusSpan.className   = `reply-status-${id} text-danger`;
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+            });
+
+        } catch (e) {
+            ticketsStatus.textContent = `Error: ${e.message}`;
+            ticketsStatus.className   = 'text-danger';
         }
     }
 
-    if (documentDropzone && documentFileInput) {
-        documentDropzone.addEventListener('click', () => documentFileInput.click());
-        documentFileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) uploadDocument(e.target.files[0]);
-            e.target.value = ''; // reset
-        });
-
-        documentDropzone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            documentDropzone.style.backgroundColor = '#2c2c2c';
-        });
-        documentDropzone.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            documentDropzone.style.backgroundColor = '';
-        });
-        documentDropzone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            documentDropzone.style.backgroundColor = '';
-            if (e.dataTransfer.files.length > 0) {
-                uploadDocument(e.dataTransfer.files[0]);
-            }
-        });
+    async function loadReplyHistory(ticketId) {
+        const container = document.getElementById(`reply-history-${ticketId}`);
+        if (!container) return;
+        try {
+            const res  = await fetch(`/admin/tickets/${ticketId}/replies`, api());
+            const data = await res.json();
+            if (!res.ok || !data.replies?.length) { container.innerHTML = ''; return; }
+            container.innerHTML = data.replies.map(r => {
+                const ts      = new Date(r.timestamp).toLocaleString();
+                const sentTag = r.email_sent
+                    ? `<span class="badge badge-resolved" style="font-size:.7rem;">✓ emailed</span>`
+                    : `<span class="badge badge-closed"   style="font-size:.7rem;">not sent</span>`;
+                return `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:var(--radius);padding:.65rem .9rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;font-size:.78rem;color:var(--text-muted);">
+                        <span><strong style="color:var(--text);">${escapeHtml(r.admin_email)}</strong> · ${ts}</span>
+                        ${sentTag}
+                    </div>
+                    <p style="margin:0;font-size:.875rem;white-space:pre-wrap;">${escapeHtml(r.reply_text)}</p>
+                </div>`;
+            }).join('');
+        } catch { container.innerHTML = ''; }
     }
 
-    // --- Ticket Modal Logic ---
-    openTicketModalButton.addEventListener('click', () => {
-        ticketModal.showModal();
-        setTimeout(() => {
-        ticketQuestionTextarea.value = currentQuestion || '';
-        ticketSubmissionMessage.textContent = ''; teamSuggestionP.textContent = '';
-        if (ticketQuestionTextarea.value) { ticketQuestionTextarea.dispatchEvent(new Event('input', { bubbles: true })); }
-        else { ticketTeamSelect.innerHTML = '<option value="">Enter question for suggestions</option>'; }
-    }, 30);
-});
+    // ═══════════════════════════════════════════════
+    //  Admin: View Permissions
+    // ═══════════════════════════════════════════════
 
-    cancelTicketButton.addEventListener('click', () => { hideTicketModal(); });
-
-    let suggestTeamTimeout;
-    ticketQuestionTextarea.addEventListener('input', () => {
-        clearTimeout(suggestTeamTimeout);
-        const questionText = ticketQuestionTextarea.value.trim();
-        teamSuggestionP.textContent = '';
-        if (!questionText) { ticketTeamSelect.innerHTML = '<option value="">Enter question to see suggestions</option>'; return; }
-        ticketTeamSelect.innerHTML = '<option value="">Loading teams...</option>';
-        suggestTeamTimeout = setTimeout(async () => {
-            try {
-                const response = await fetch('/tickets/suggest_team', getFetchOptions('POST', { question_text: questionText }));
-                const data = await response.json();
-                ticketTeamSelect.innerHTML = '';
-                if (!response.ok) throw new Error(data.detail || 'Unknown error');
-                if (data.available_teams && data.available_teams.length > 0) {
-                    data.available_teams.forEach(team => {
-                        const option = document.createElement('option');
-                        option.value = team; option.textContent = team;
-                        if (team === data.suggested_team) { option.selected = true; }
-                        ticketTeamSelect.appendChild(option);
-                    });
-                    teamSuggestionP.textContent = data.suggested_team ? `Suggested Team: ${data.suggested_team}` : 'Please select a team.';
-                } else { ticketTeamSelect.innerHTML = '<option value="">No teams available</option>'; }
-            } catch (error) { teamSuggestionP.textContent = `Error: ${error.message}`; }
-        }, 500);
-    });
-    
-    // --- UPDATED: submitTicketButton listener for new API contract ---
-    submitTicketButton.addEventListener('click', async () => {
-        const question_text = ticketQuestionTextarea.value.trim(); const selected_team = ticketTeamSelect.value;
-        ticketSubmissionMessage.textContent = ''; ticketSubmissionMessage.className = 'error-message';
-        if (!question_text || !selected_team) { ticketSubmissionMessage.textContent = 'Question and team selection are required.'; return; }
+    viewPermsBtn.addEventListener('click', async () => {
+        const email = viewEmailInput.value.trim();
+        if (!email) { viewPermsMsg.textContent = 'Please enter an email.'; viewPermsMsg.className = 'text-danger'; return; }
+        viewPermsMsg.textContent = 'Loading…'; viewPermsMsg.className = 'text-muted';
+        permsDisplay.classList.add('hidden');
         try {
-            // UPDATED: 'chat_history' instead of 'chat_history_json', no stringify
-            const body = { question_text: question_text, chat_history: chatHistory.slice(-5), selected_team: selected_team };
-            const response = await fetch('/tickets/create', getFetchOptions('POST', body));
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Could not create ticket.');
-            ticketSubmissionMessage.textContent = 'Ticket created successfully!';
-            ticketSubmissionMessage.className = 'success-message';
-            setTimeout(hideTicketModal, 2000);
-        } catch (error) { ticketSubmissionMessage.textContent = `Error: ${error.message}`; }
-    });
-    
-    // --- Application Initialization ---
-    async function initApp() {
-        try {
-            const response = await fetch('/auth/me', getFetchOptions('POST'));
-            if (!response.ok) { throw new Error("No valid session."); }
-            const data = await response.json();
-            
-            if (data.user_profile) {
-                console.log("Session validated. Resuming for:", data.user_profile.user_email);
-                updateUIForUserProfile(data.user_profile);
-            } else {
-                throw new Error("Profile not found in session response.");
-            }
-        } catch (error) {
-            console.log("Initialization check failed:", error.message);
-            localStorage.removeItem('knowledgeAssistantProfile');
-            currentUserEmail = null; currentUserProfile = null;
-            showLogin();
+            const res  = await fetch(`/admin/view_user_permissions/${encodeURIComponent(email)}`, api());
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Not found');
+            viewPermsMsg.textContent = '✓ Found';
+            viewPermsMsg.className   = 'text-success';
+            permsEmailLabel.textContent = data.user_email || email;
+            permsJson.textContent = JSON.stringify(data, null, 2);
+            permsDisplay.classList.remove('hidden');
+        } catch (e) {
+            viewPermsMsg.textContent = e.message;
+            viewPermsMsg.className   = 'text-danger';
         }
-    }
-    
+    });
+
+    viewEmailInput.addEventListener('keydown', e => { if (e.key === 'Enter') viewPermsBtn.click(); });
+
+    // ═══════════════════════════════════════════════
+    //  Admin: Manage Permissions
+    // ═══════════════════════════════════════════════
+
+    addRoleBtn.addEventListener('click', () => {
+        const ctx  = roleCtxInput.value.trim().toUpperCase();
+        const role = roleNameInput.value.trim().toUpperCase();
+        if (!ctx || !role) { toast('Both context and role are required', 'error'); return; }
+        if (!contextualRoles[ctx]) contextualRoles[ctx] = [];
+        if (!contextualRoles[ctx].includes(role)) contextualRoles[ctx].push(role);
+        rolesPreview.textContent = JSON.stringify(contextualRoles, null, 2);
+        roleCtxInput.value = ''; roleNameInput.value = ''; roleCtxInput.focus();
+    });
+
+    permsForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        permsFormMsg.textContent = '';
+        const targetEmail = targetEmailInput.value.trim();
+        if (!targetEmail) { permsFormMsg.textContent = 'Target email is required.'; permsFormMsg.className = 'text-danger'; return; }
+
+        const permissions = {};
+        const level = targetLevelInput.value;
+        if (level !== '') permissions.user_hierarchy_level = parseInt(level, 10);
+        permissions.is_admin = targetIsAdminInput.checked;
+        permissions.departments = Array.from(deptCheckboxes.querySelectorAll('input:checked')).map(i => i.value);
+        const projStr = targetProjectsInput.value.trim();
+        permissions.projects_membership = projStr ? projStr.split(',').map(p => p.trim().toUpperCase()).filter(Boolean) : [];
+        if (Object.keys(contextualRoles).length > 0) permissions.contextual_roles = contextualRoles;
+
+        try {
+            const res  = await fetch('/admin/user_permissions', api('POST', { target_email: targetEmail, permissions }));
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Update failed');
+            permsFormMsg.textContent = data.message || 'Permissions updated!';
+            permsFormMsg.className   = 'text-success';
+            toast('Permissions updated', 'success');
+            permsForm.reset();
+            contextualRoles = {};
+            rolesPreview.textContent = '{}';
+        } catch (e) {
+            permsFormMsg.textContent = e.message;
+            permsFormMsg.className   = 'text-danger';
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    //  Admin: Remove User
+    // ═══════════════════════════════════════════════
+
+    removeUserBtn.addEventListener('click', async () => {
+        const email = removeEmailInput.value.trim();
+        if (!email) { removeMsg.textContent = 'Email is required.'; removeMsg.className = 'text-danger'; return; }
+        const ok = await confirm('Remove User', `Permanently remove "${email}"? This cannot be undone.`);
+        if (!ok) return;
+        try {
+            const res  = await fetch('/admin/remove_user', api('POST', { target_email: email }));
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Failed');
+            removeMsg.textContent = data.message || 'User removed.';
+            removeMsg.className   = 'text-success';
+            removeEmailInput.value = '';
+            toast(`User "${email}" removed`, 'success');
+        } catch (e) {
+            removeMsg.textContent = e.message;
+            removeMsg.className   = 'text-danger';
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    //  Boot
+    // ═══════════════════════════════════════════════
     initApp();
 });

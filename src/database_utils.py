@@ -38,9 +38,9 @@ def init_all_databases():
     try:
         with engine.connect() as connection:
             logger.info("Initializing/verifying database schema...")
-            # We run each initialization function within a single connection.
             init_auth_db(connection)
             init_ticket_db(connection)
+            init_ticket_replies_db(connection)
             init_feedback_db(connection)
             init_sync_state_db(connection)
             logger.info("✅ All database tables initialized/verified successfully.")
@@ -79,6 +79,21 @@ def init_ticket_db(connection):
     '''))
     connection.commit()
     logger.info("Tickets table verified.")
+
+def init_ticket_replies_db(connection):
+    """Initializes the ticket_replies table for admin-to-user reply threads."""
+    connection.execute(text('''
+        CREATE TABLE IF NOT EXISTS ticket_replies (
+            id SERIAL PRIMARY KEY,
+            ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+            admin_email TEXT NOT NULL,
+            reply_text TEXT NOT NULL,
+            email_sent BOOLEAN DEFAULT FALSE,
+            "timestamp" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    '''))
+    connection.commit()
+    logger.info("Ticket replies table verified.")
 
 def init_feedback_db(connection):
     """Initializes the feedback table with a foreign key to users."""
@@ -214,7 +229,7 @@ def delete_user_profile(email: str) -> bool:
         logger.error(f"Profile deletion failed for {email}: {e}", exc_info=True)
         return False
 
-def get_recent_tickets(limit: int = 20) -> List[Dict[str, Any]]:
+def get_recent_tickets(limit: int = 50) -> List[Dict[str, Any]]:
     sql = text('SELECT * FROM tickets ORDER BY "timestamp" DESC LIMIT :limit')
     tickets = []
     try:
@@ -225,6 +240,70 @@ def get_recent_tickets(limit: int = 20) -> List[Dict[str, Any]]:
     except SQLAlchemyError as e:
         logger.error(f"Failed to fetch recent tickets: {e}", exc_info=True)
     return tickets
+
+
+def update_ticket_status(ticket_id: int, new_status: str) -> bool:
+    """Updates the status of a ticket by ID. Returns True on success."""
+    sql = text("UPDATE tickets SET status = :status WHERE id = :ticket_id")
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(sql, {"status": new_status, "ticket_id": ticket_id})
+            connection.commit()
+            if result.rowcount > 0:
+                logger.info(f"Ticket #{ticket_id} status updated to '{new_status}'.")
+                return True
+            logger.warning(f"Ticket #{ticket_id} not found for status update.")
+            return False
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to update ticket #{ticket_id}: {e}", exc_info=True)
+        return False
+
+
+def save_ticket_reply(ticket_id: int, admin_email: str, reply_text: str, email_sent: bool) -> Optional[int]:
+    """Saves an admin reply to the ticket_replies table. Returns the new reply ID."""
+    sql = text("""
+        INSERT INTO ticket_replies (ticket_id, admin_email, reply_text, email_sent)
+        VALUES (:ticket_id, :admin_email, :reply_text, :email_sent)
+        RETURNING id
+    """)
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(sql, {
+                "ticket_id": ticket_id,
+                "admin_email": admin_email,
+                "reply_text": reply_text,
+                "email_sent": email_sent
+            }).scalar_one_or_none()
+            connection.commit()
+            logger.info(f"Reply saved for ticket #{ticket_id} by {admin_email}.")
+            return result
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to save reply for ticket #{ticket_id}: {e}", exc_info=True)
+        return None
+
+
+def get_ticket_replies(ticket_id: int) -> List[Dict[str, Any]]:
+    """Returns all replies for a ticket, oldest first."""
+    sql = text('SELECT * FROM ticket_replies WHERE ticket_id = :ticket_id ORDER BY "timestamp" ASC')
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(sql, {"ticket_id": ticket_id}).fetchall()
+            return [dict(row._mapping) for row in result]
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to get replies for ticket #{ticket_id}: {e}", exc_info=True)
+        return []
+
+
+def get_ticket_by_id(ticket_id: int) -> Optional[Dict[str, Any]]:
+    """Returns a single ticket row by ID."""
+    sql = text("SELECT * FROM tickets WHERE id = :ticket_id")
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(sql, {"ticket_id": ticket_id}).fetchone()
+            return dict(row._mapping) if row else None
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to get ticket #{ticket_id}: {e}", exc_info=True)
+        return None
 
 
 def create_sample_users_if_not_exist():
